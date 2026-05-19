@@ -3,18 +3,20 @@
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Textarea";
-import { getStore, resetStore, type Conversation } from "@/lib/store";
+import { getStore, setStore, resetStore } from "@/lib/store";
 import {
   getConversationMessages,
   conversationNeedsReply,
+  createMessage,
 } from "@/lib/chat";
-import { formatTime } from "@/lib/time";
+import { formatTime, nowISO } from "@/lib/time";
 
 export default function AdminPage() {
   const [activeConversationId, setActiveConversationId] = useState<
     string | null
   >(null);
   const [renderTick, setRenderTick] = useState(0);
+  const [replyContent, setReplyContent] = useState("");
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const refresh = useCallback(() => setRenderTick((t) => t + 1), []);
@@ -70,12 +72,40 @@ export default function AdminPage() {
   const handleClearData = () => {
     resetStore();
     setActiveConversationId(null);
+    setReplyContent("");
     setShowClearConfirm(false);
     refresh();
   };
 
+  const handleSelectConversation = (id: string) => {
+    setActiveConversationId(id);
+    setReplyContent("");
+  };
+
   const handleReply = () => {
-    // Phase 4 will implement actual reply logic
+    const content = replyContent.trim();
+    if (!content || !activeConversationId) return;
+
+    createMessage(activeConversationId, "admin", content);
+
+    const store = getStore();
+    const conv = store.conversations.find(
+      (c) => c.id === activeConversationId
+    );
+    if (conv) {
+      conv.updatedAt = nowISO();
+    }
+    setStore(store);
+
+    setReplyContent("");
+    refresh();
+  };
+
+  const handleReplyKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleReply();
+    }
   };
 
   return (
@@ -104,7 +134,7 @@ export default function AdminPage() {
             return (
               <button
                 key={conv.id}
-                onClick={() => setActiveConversationId(conv.id)}
+                onClick={() => handleSelectConversation(conv.id)}
                 className={`w-full text-left px-4 py-3 transition-colors hover:bg-[#ebebeb] ${
                   activeConversationId === conv.id
                     ? "bg-[#e8e8e8]"
@@ -224,8 +254,16 @@ export default function AdminPage() {
                   placeholder="输入回复..."
                   className="flex-1"
                   rows={2}
+                  value={replyContent}
+                  onChange={(e) => setReplyContent(e.target.value)}
+                  onKeyDown={handleReplyKeyDown}
                 />
-                <Button onClick={handleReply}>回复</Button>
+                <Button
+                  onClick={handleReply}
+                  disabled={!replyContent.trim()}
+                >
+                  回复
+                </Button>
               </div>
             </div>
           </div>
