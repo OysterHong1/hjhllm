@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Textarea";
@@ -12,8 +12,11 @@ import {
 import {
   getUserConversations,
   getConversationMessages,
+  createConversation,
+  createMessage,
+  makeConversationTitle,
 } from "@/lib/chat";
-import { formatTime } from "@/lib/time";
+import { formatTime, nowISO } from "@/lib/time";
 
 export default function ChatPage() {
   const router = useRouter();
@@ -30,6 +33,8 @@ export default function ChatPage() {
       router.replace("/login");
     }
   }, [router]);
+
+  const refresh = useCallback(() => setRenderTick((t) => t + 1), []);
 
   const conversations = user
     ? getUserConversations(user.id)
@@ -50,18 +55,42 @@ export default function ChatPage() {
     }
   }, [conversations, activeConversationId]);
 
-  // Store change listener
+  // Cross-tab store change listener
   useEffect(() => {
-    const onStorage = () => setRenderTick((t) => t + 1);
+    const onStorage = () => refresh();
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
-  }, []);
-
-  // Re-render on cross-tab store changes
+  }, [refresh]);
 
   const handleSend = () => {
-    // Phase 3 will implement actual message sending
+    const content = composerValue.trim();
+    if (!content || !user) return;
+
+    let convId = activeConversationId;
+
+    // Auto-create conversation if none is active
+    if (!convId) {
+      const conv = createConversation(user.id);
+      convId = conv.id;
+      setActiveConversationId(convId);
+    }
+
+    // Create the user message
+    createMessage(convId, "user", content);
+
+    // Update conversation title if this is the first message
+    const store = getStore();
+    const conv = store.conversations.find((c) => c.id === convId);
+    if (conv && conv.title === "新的会话") {
+      conv.title = makeConversationTitle(content);
+      conv.updatedAt = nowISO();
+    } else if (conv) {
+      conv.updatedAt = nowISO();
+    }
+    setStore(store);
+
     setComposerValue("");
+    refresh();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -69,6 +98,11 @@ export default function ChatPage() {
       e.preventDefault();
       handleSend();
     }
+  };
+
+  const handleNewConversation = () => {
+    setActiveConversationId(null);
+    setComposerValue("");
   };
 
   const handleLogout = () => {
@@ -86,7 +120,11 @@ export default function ChatPage() {
       <aside className="w-[260px] flex-shrink-0 flex flex-col bg-sidebar border-r border-border">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <h1 className="text-sm font-semibold text-foreground">HJH LLM</h1>
-          <Button variant="ghost" className="text-xs px-2 py-1">
+          <Button
+            variant="ghost"
+            className="text-xs px-2 py-1"
+            onClick={handleNewConversation}
+          >
             新建会话
           </Button>
         </div>
@@ -102,9 +140,7 @@ export default function ChatPage() {
               key={conv.id}
               onClick={() => setActiveConversationId(conv.id)}
               className={`w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-[#ebebeb] ${
-                activeConversationId === conv.id
-                  ? "bg-[#e8e8e8]"
-                  : ""
+                activeConversationId === conv.id ? "bg-[#e8e8e8]" : ""
               }`}
             >
               <div className="truncate text-foreground">{conv.title}</div>
@@ -156,11 +192,7 @@ export default function ChatPage() {
 
             {/* Thinking indicator */}
             {isThinking && (
-              <div className="flex justify-start">
-                <div className="text-sm text-muted italic px-4 py-1">
-                  Thinking...
-                </div>
-              </div>
+              <ThinkingBubble />
             )}
           </div>
         </div>
@@ -187,6 +219,27 @@ export default function ChatPage() {
           </div>
         </div>
       </main>
+    </div>
+  );
+}
+
+function ThinkingBubble() {
+  const [dots, setDots] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setDots((d) => (d + 1) % 4);
+    }, 500);
+    return () => clearInterval(interval);
+  }, []);
+
+  const text = "Thinking" + ".".repeat(dots);
+
+  return (
+    <div className="flex justify-start">
+      <div className="text-sm text-muted italic px-4 py-1 select-none min-w-[100px]">
+        {text}
+      </div>
     </div>
   );
 }
