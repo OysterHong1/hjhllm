@@ -1,46 +1,63 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Textarea";
-
-// Static mock data for Phase 1
-const mockConversations = [
-  { id: "1", title: "你好，今天天气怎么样？", updatedAt: "10:30" },
-  { id: "2", title: "帮我写一段代码", updatedAt: "09:15" },
-  { id: "3", title: "什么是机器学习？", updatedAt: "昨天" },
-];
-
-const mockMessages: Record<string, { id: string; sender: string; content: string }[]> = {
-  "1": [
-    { id: "m1", sender: "user", content: "你好，今天天气怎么样？" },
-    { id: "m2", sender: "admin", content: "你好！今天天气不错，阳光明媚。" },
-  ],
-  "2": [
-    { id: "m3", sender: "user", content: "帮我写一段代码" },
-    { id: "m4", sender: "admin", content: "当然，请问你需要什么语言？" },
-    { id: "m5", sender: "user", content: "Python" },
-    { id: "m6", sender: "admin", content: "好的，这是一个简单的 Python 函数示例：\n\ndef greet(name):\n    return f\"Hello, {name}!\"\n\nprint(greet(\"World\"))" },
-  ],
-  "3": [
-    { id: "m7", sender: "user", content: "什么是机器学习？" },
-    { id: "m8", sender: "admin", content: "机器学习是人工智能的一个分支，它使计算机能够从数据中学习和改进，而无需进行明确的编程。常见的应用包括图像识别、自然语言处理和推荐系统等。" },
-  ],
-};
+import {
+  getCurrentUser,
+  getStore,
+  setStore,
+} from "@/lib/store";
+import {
+  getUserConversations,
+  getConversationMessages,
+} from "@/lib/chat";
+import { formatTime } from "@/lib/time";
 
 export default function ChatPage() {
-  const [activeConversationId, setActiveConversationId] = useState("1");
+  const router = useRouter();
+  const user = getCurrentUser();
+  const [activeConversationId, setActiveConversationId] = useState<
+    string | null
+  >(null);
   const [composerValue, setComposerValue] = useState("");
+  const [renderTick, setRenderTick] = useState(0);
 
-  const activeConversation = mockConversations.find(
-    (c) => c.id === activeConversationId
-  );
+  // Route protection
+  useEffect(() => {
+    if (!getCurrentUser()) {
+      router.replace("/login");
+    }
+  }, [router]);
 
-  const activeMessages = mockMessages[activeConversationId] || [];
+  const conversations = user
+    ? getUserConversations(user.id)
+    : [];
+
+  const activeMessages = activeConversationId
+    ? getConversationMessages(activeConversationId)
+    : [];
 
   const isThinking =
     activeMessages.length > 0 &&
     activeMessages[activeMessages.length - 1].sender === "user";
+
+  // Auto-select first conversation on mount
+  useEffect(() => {
+    if (conversations.length > 0 && !activeConversationId) {
+      setActiveConversationId(conversations[0].id);
+    }
+  }, [conversations, activeConversationId]);
+
+  // Store change listener
+  useEffect(() => {
+    const onStorage = () => setRenderTick((t) => t + 1);
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  // Re-render on cross-tab store changes
 
   const handleSend = () => {
     // Phase 3 will implement actual message sending
@@ -54,6 +71,15 @@ export default function ChatPage() {
     }
   };
 
+  const handleLogout = () => {
+    const store = getStore();
+    store.currentUserId = null;
+    setStore(store);
+    router.replace("/login");
+  };
+
+  if (!user) return null;
+
   return (
     <div className="flex h-full">
       {/* Sidebar */}
@@ -66,7 +92,12 @@ export default function ChatPage() {
         </div>
 
         <div className="flex-1 overflow-y-auto py-2">
-          {mockConversations.map((conv) => (
+          {conversations.length === 0 && (
+            <div className="px-4 py-8 text-center text-xs text-muted">
+              暂无会话，发送消息开始
+            </div>
+          )}
+          {conversations.map((conv) => (
             <button
               key={conv.id}
               onClick={() => setActiveConversationId(conv.id)}
@@ -77,13 +108,21 @@ export default function ChatPage() {
               }`}
             >
               <div className="truncate text-foreground">{conv.title}</div>
-              <div className="text-xs text-muted mt-0.5">{conv.updatedAt}</div>
+              <div className="text-xs text-muted mt-0.5">
+                {formatTime(conv.updatedAt)}
+              </div>
             </button>
           ))}
         </div>
 
-        <div className="px-4 py-3 border-t border-border">
-          <div className="text-xs text-muted">当前用户: 游客</div>
+        <div className="px-4 py-3 border-t border-border flex items-center justify-between">
+          <div className="text-xs text-muted">{user.username}</div>
+          <button
+            onClick={handleLogout}
+            className="text-xs text-muted hover:text-foreground transition-colors"
+          >
+            退出
+          </button>
         </div>
       </aside>
 
@@ -92,6 +131,12 @@ export default function ChatPage() {
         {/* Message list */}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-3xl mx-auto px-6 py-6 space-y-6">
+            {!activeConversationId && (
+              <div className="text-center text-sm text-muted py-12">
+                选择一个会话或新建会话开始聊天
+              </div>
+            )}
+
             {activeMessages.map((msg) => (
               <div
                 key={msg.id}

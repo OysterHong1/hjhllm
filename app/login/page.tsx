@@ -1,24 +1,36 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { createUser } from "@/lib/chat";
+import { getCurrentUser } from "@/lib/store";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
+  const [mounted, setMounted] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    setMounted(true);
+    if (getCurrentUser()) {
+      router.replace("/chat");
+    }
+  }, [router]);
 
   const handleLogin = () => {
     const trimmed = username.trim();
     if (!trimmed) return;
-    // Phase 2 will implement actual login logic
+    createUser(trimmed);
     router.push("/chat");
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") handleLogin();
   };
+
+  if (!mounted) return null;
 
   return (
     <div className="flex h-full items-center justify-center bg-background">
