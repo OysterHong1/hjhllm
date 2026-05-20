@@ -9,11 +9,9 @@ import { getCurrentUser } from "@/lib/store";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
-  const [mounted, setMounted] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
-    setMounted(true);
     if (getCurrentUser()) {
       router.replace("/chat");
     }
@@ -29,8 +27,6 @@ export default function LoginPage() {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") handleLogin();
   };
-
-  if (!mounted) return null;
 
   return (
     <div className="flex h-full items-center justify-center bg-background">

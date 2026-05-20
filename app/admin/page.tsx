@@ -15,7 +15,7 @@ export default function AdminPage() {
   const [activeConversationId, setActiveConversationId] = useState<
     string | null
   >(null);
-  const [renderTick, setRenderTick] = useState(0);
+  const [, setRenderTick] = useState(0);
   const [replyContent, setReplyContent] = useState("");
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -49,24 +49,20 @@ export default function AdminPage() {
     );
   });
 
+  const selectedConversationId =
+    activeConversationId ?? sortedConversations[0]?.id ?? null;
+
   const activeConversation = allConversations.find(
-    (c) => c.id === activeConversationId
+    (c) => c.id === selectedConversationId
   );
 
-  const messages = activeConversationId
-    ? getConversationMessages(activeConversationId)
+  const messages = selectedConversationId
+    ? getConversationMessages(selectedConversationId)
     : [];
 
   const activeUser = activeConversation
     ? store.users.find((u) => u.id === activeConversation.userId)
     : null;
-
-  // Auto-select first conversation
-  useEffect(() => {
-    if (sortedConversations.length > 0 && !activeConversationId) {
-      setActiveConversationId(sortedConversations[0].id);
-    }
-  }, [sortedConversations, activeConversationId]);
 
   // Auto-scroll on new messages
   useEffect(() => {
@@ -89,13 +85,13 @@ export default function AdminPage() {
 
   const handleReply = () => {
     const content = replyContent.trim();
-    if (!content || !activeConversationId) return;
+    if (!content || !selectedConversationId) return;
 
-    createMessage(activeConversationId, "admin", content);
+    createMessage(selectedConversationId, "admin", content);
 
     const store = getStore();
     const conv = store.conversations.find(
-      (c) => c.id === activeConversationId
+      (c) => c.id === selectedConversationId
     );
     if (conv) {
       conv.updatedAt = nowISO();
@@ -137,7 +133,7 @@ export default function AdminPage() {
               key={conv.id}
               onClick={() => handleSelectConversation(conv.id)}
               className={`w-full text-left px-4 py-3 transition-colors hover:bg-[#ebebeb] ${
-                activeConversationId === conv.id ? "bg-[#e8e8e8]" : ""
+                selectedConversationId === conv.id ? "bg-[#e8e8e8]" : ""
               }`}
             >
               <div className="flex items-center gap-2">
@@ -270,13 +266,13 @@ export default function AdminPage() {
               </div>
             ))}
 
-            {activeConversationId && messages.length === 0 && (
+            {selectedConversationId && messages.length === 0 && (
               <div className="text-center text-sm text-muted py-12">
                 暂无消息
               </div>
             )}
 
-            {!activeConversationId && (
+            {!selectedConversationId && (
               <div className="text-center text-sm text-muted py-12">
                 选择左侧会话查看详情
               </div>
@@ -287,7 +283,7 @@ export default function AdminPage() {
         </div>
 
         {/* Reply box */}
-        {activeConversationId && (
+        {selectedConversationId && (
           <div className="flex-shrink-0 border-t border-border bg-sidebar">
             <div className="max-w-3xl mx-auto px-4 md:px-6 py-4">
               <div className="text-xs text-muted mb-2">回复消息</div>

@@ -23,9 +23,13 @@ export default function ChatPage() {
   const user = getCurrentUser();
   const [activeConversationId, setActiveConversationId] = useState<
     string | null
-  >(null);
+  >(() => {
+    const currentUser = getCurrentUser();
+    if (!currentUser) return null;
+    return getUserConversations(currentUser.id)[0]?.id ?? null;
+  });
   const [composerValue, setComposerValue] = useState("");
-  const [renderTick, setRenderTick] = useState(0);
+  const [, setRenderTick] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -49,13 +53,6 @@ export default function ChatPage() {
   const isThinking =
     activeMessages.length > 0 &&
     activeMessages[activeMessages.length - 1].sender === "user";
-
-  // Auto-select first conversation on mount
-  useEffect(() => {
-    if (conversations.length > 0 && !activeConversationId) {
-      setActiveConversationId(conversations[0].id);
-    }
-  }, [conversations, activeConversationId]);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {

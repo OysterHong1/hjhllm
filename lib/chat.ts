@@ -1,4 +1,4 @@
-import { getStore, setStore, updateStore, type Message, type Conversation } from "./store";
+import { getStore, setStore, type Message, type Conversation } from "./store";
 import { createId } from "./ids";
 import { nowISO } from "./time";
 
