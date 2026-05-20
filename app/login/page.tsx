@@ -4,24 +4,58 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { createUser } from "@/lib/chat";
-import { getCurrentUser } from "@/lib/store";
+import {
+  createUserSession,
+  getErrorMessage,
+  restoreUserSession,
+} from "@/lib/api-client/client";
+import {
+  clearStoredUserId,
+  getStoredUserId,
+  setStoredUserId,
+} from "@/lib/api-client/session";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   const router = useRouter();
 
   useEffect(() => {
-    if (getCurrentUser()) {
-      router.replace("/chat");
-    }
+    const userId = getStoredUserId();
+    if (!userId) return;
+
+    let cancelled = false;
+    restoreUserSession(userId)
+      .then(() => {
+        if (!cancelled) router.replace("/chat");
+      })
+      .catch(() => {
+        if (!cancelled) {
+          clearStoredUserId();
+          setErrorMessage("");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     const trimmed = username.trim();
-    if (!trimmed) return;
-    createUser(trimmed);
-    router.push("/chat");
+    if (!trimmed || isSubmitting) return;
+
+    setIsSubmitting(true);
+    setErrorMessage("");
+    try {
+      const user = await createUserSession(trimmed);
+      setStoredUserId(user.id);
+      router.push("/chat");
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+      setIsSubmitting(false);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -49,10 +83,13 @@ export default function LoginPage() {
           <Button
             className="w-full"
             onClick={handleLogin}
-            disabled={!username.trim()}
+            disabled={!username.trim() || isSubmitting}
           >
-            进入聊天
+            {isSubmitting ? "进入中..." : "进入聊天"}
           </Button>
+          {errorMessage && (
+            <p className="text-sm text-accent text-center">{errorMessage}</p>
+          )}
         </div>
       </div>
     </div>

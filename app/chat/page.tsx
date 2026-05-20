@@ -5,50 +5,93 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Textarea";
 import {
-  getCurrentUser,
-  getStore,
-  setStore,
-} from "@/lib/store";
-import {
-  getUserConversations,
-  getConversationMessages,
   createConversation,
   createMessage,
-  makeConversationTitle,
-} from "@/lib/chat";
-import { formatTime, nowISO } from "@/lib/time";
+  getErrorMessage,
+  listConversations,
+  listMessages,
+  restoreUserSession,
+} from "@/lib/api-client/client";
+import { clearStoredUserId, getStoredUserId } from "@/lib/api-client/session";
+import type { Conversation, Message, User } from "@/lib/contracts";
+import { formatTime } from "@/lib/time";
 
 export default function ChatPage() {
   const router = useRouter();
-  const user = getCurrentUser();
+  const [user, setUser] = useState<User | null>(null);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeMessages, setActiveMessages] = useState<Message[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<
     string | null
-  >(() => {
-    const currentUser = getCurrentUser();
-    if (!currentUser) return null;
-    return getUserConversations(currentUser.id)[0]?.id ?? null;
-  });
+  >(null);
   const [composerValue, setComposerValue] = useState("");
-  const [, setRenderTick] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSending, setIsSending] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Route protection
+  const loadMessages = useCallback(
+    async (conversationId: string, userId: string) => {
+      const messages = await listMessages(conversationId, userId);
+      setActiveMessages(messages);
+    },
+    []
+  );
+
+  const loadConversations = useCallback(
+    async (userId: string, preferredConversationId?: string | null) => {
+      const nextConversations = await listConversations(userId);
+      setConversations(nextConversations);
+
+      const nextActiveId =
+        preferredConversationId ??
+        nextConversations[0]?.id ??
+        null;
+      setActiveConversationId(nextActiveId);
+
+      if (nextActiveId) {
+        await loadMessages(nextActiveId, userId);
+      } else {
+        setActiveMessages([]);
+      }
+    },
+    [loadMessages]
+  );
+
   useEffect(() => {
-    if (!getCurrentUser()) {
+    const userId = getStoredUserId();
+    if (!userId) {
       router.replace("/login");
+      return;
     }
-  }, [router]);
 
-  const refresh = useCallback(() => setRenderTick((t) => t + 1), []);
+    const storedUserId = userId;
+    let cancelled = false;
 
-  const conversations = user
-    ? getUserConversations(user.id)
-    : [];
+    async function restore() {
+      try {
+        const restoredUser = await restoreUserSession(storedUserId);
+        if (cancelled) return;
+        setUser(restoredUser);
+        await loadConversations(restoredUser.id);
+      } catch (error) {
+        if (!cancelled) {
+          clearStoredUserId();
+          setErrorMessage(getErrorMessage(error));
+          router.replace("/login");
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
 
-  const activeMessages = activeConversationId
-    ? getConversationMessages(activeConversationId)
-    : [];
+    void restore();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loadConversations, router]);
 
   const isThinking =
     activeMessages.length > 0 &&
@@ -59,39 +102,58 @@ export default function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [activeMessages.length, isThinking]);
 
-  // Cross-tab store change listener
   useEffect(() => {
-    const onStorage = () => refresh();
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, [refresh]);
+    if (!user || !activeConversationId) return;
 
-  const handleSend = () => {
+    const currentUser = user;
+    const currentConversationId = activeConversationId;
+    let cancelled = false;
+
+    async function refreshMessages() {
+      try {
+        const messages = await listMessages(
+          currentConversationId,
+          currentUser.id
+        );
+        if (!cancelled) setActiveMessages(messages);
+      } catch (error) {
+        if (!cancelled) setErrorMessage(getErrorMessage(error));
+      }
+    }
+
+    void refreshMessages();
+    const interval = window.setInterval(refreshMessages, 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [activeConversationId, user]);
+
+  const handleSend = async () => {
     const content = composerValue.trim();
-    if (!content || !user) return;
+    if (!content || !user || isSending) return;
 
-    let convId = activeConversationId;
+    setIsSending(true);
+    setErrorMessage("");
 
-    if (!convId) {
-      const conv = createConversation(user.id);
-      convId = conv.id;
-      setActiveConversationId(convId);
+    try {
+      let convId = activeConversationId;
+
+      if (!convId) {
+        const conversation = await createConversation(user.id);
+        convId = conversation.id;
+        setActiveConversationId(convId);
+      }
+
+      const message = await createMessage(convId, user.id, content);
+      setActiveMessages((messages) => [...messages, message]);
+      setComposerValue("");
+      await loadConversations(user.id, convId);
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    } finally {
+      setIsSending(false);
     }
-
-    createMessage(convId, "user", content);
-
-    const store = getStore();
-    const conv = store.conversations.find((c) => c.id === convId);
-    if (conv && conv.title === "新的会话") {
-      conv.title = makeConversationTitle(content);
-      conv.updatedAt = nowISO();
-    } else if (conv) {
-      conv.updatedAt = nowISO();
-    }
-    setStore(store);
-
-    setComposerValue("");
-    refresh();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -103,23 +165,29 @@ export default function ChatPage() {
 
   const handleNewConversation = () => {
     setActiveConversationId(null);
+    setActiveMessages([]);
     setComposerValue("");
     setSidebarOpen(false);
   };
 
-  const handleSelectConversation = (id: string) => {
+  const handleSelectConversation = async (id: string) => {
+    if (!user) return;
     setActiveConversationId(id);
     setSidebarOpen(false);
+    setErrorMessage("");
+    try {
+      await loadMessages(id, user.id);
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    }
   };
 
   const handleLogout = () => {
-    const store = getStore();
-    store.currentUserId = null;
-    setStore(store);
+    clearStoredUserId();
     router.replace("/login");
   };
 
-  if (!user) return null;
+  if (isLoading || !user) return null;
 
   const sidebar = (
     <aside className="flex flex-col bg-sidebar border-r border-border h-full">
@@ -228,7 +296,7 @@ export default function ChatPage() {
                         : "text-foreground"
                     }`}
                   >
-                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                    <p className="whitespace-pre-wrap">{msg.text}</p>
                   </div>
                   <div
                     className={`text-[10px] text-muted mt-1 ${
@@ -261,11 +329,14 @@ export default function ChatPage() {
               />
               <Button
                 onClick={handleSend}
-                disabled={!composerValue.trim()}
+                disabled={!composerValue.trim() || isSending}
               >
-                发送
+                {isSending ? "发送中" : "发送"}
               </Button>
             </div>
+            {errorMessage && (
+              <p className="mt-2 text-xs text-accent">{errorMessage}</p>
+            )}
           </div>
         </div>
       </main>
