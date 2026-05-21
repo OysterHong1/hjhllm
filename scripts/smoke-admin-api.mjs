@@ -1,5 +1,6 @@
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { createClient } from "@supabase/supabase-js";
 
 function loadEnvFile(path) {
   if (!existsSync(path)) return;
@@ -29,6 +30,8 @@ const baseUrl = (
   "http://localhost:3000"
 ).replace(/\/$/, "");
 const adminToken = process.env.ADMIN_API_TOKEN;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!adminToken) {
   throw new Error("ADMIN_API_TOKEN is required for admin API smoke tests");
@@ -39,12 +42,16 @@ function assert(condition, message) {
 }
 
 async function request(path, init = {}) {
+  const headers = {
+    ...init.headers,
+  };
+  if (!(init.body instanceof FormData)) {
+    headers["Content-Type"] = "application/json";
+  }
+
   const response = await fetch(`${baseUrl}${path}`, {
     ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...init.headers,
-    },
+    headers,
   });
 
   const text = await response.text();
@@ -75,9 +82,34 @@ function textOf(body) {
   return body?.error?.message ?? JSON.stringify(body);
 }
 
+async function cleanupSmokeData(userId, storagePaths) {
+  if (!supabaseUrl || !serviceRoleKey) {
+    console.log("Skipped direct Supabase cleanup: service env is missing");
+    return;
+  }
+
+  const supabase = createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
+
+  if (storagePaths.length > 0) {
+    const { error } = await supabase.storage
+      .from("message-attachments")
+      .remove(storagePaths);
+    if (error) throw new Error(`Storage cleanup failed: ${error.message}`);
+  }
+
+  const { error } = await supabase.from("users").delete().eq("id", userId);
+  if (error) throw new Error(`User cleanup failed: ${error.message}`);
+}
+
 const runId = Date.now().toString(36);
 const username = `smoke-admin-${runId}`;
 const userText = `smoke user message ${runId}`;
+const attachmentText = `smoke attachment message ${runId}`;
 const adminText = `smoke admin reply ${runId}`;
 
 console.log(`Admin smoke target: ${baseUrl}`);
@@ -113,6 +145,40 @@ await api(`/api/conversations/${encodeURIComponent(conversation.id)}/messages`, 
 });
 console.log("✓ created user message");
 
+const pngBytes = new Uint8Array([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+  0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+  0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00,
+  0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00,
+  0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49,
+  0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+]);
+const attachmentForm = new FormData();
+attachmentForm.set("userId", user.id);
+attachmentForm.set("conversationId", conversation.id);
+attachmentForm.set("text", attachmentText);
+attachmentForm.set(
+  "file",
+  new Blob([pngBytes], { type: "image/png" }),
+  `smoke-${runId}.png`
+);
+
+const {
+  data: { message: attachmentMessage },
+} = await api("/api/attachments", {
+  method: "POST",
+  body: attachmentForm,
+});
+assert(
+  attachmentMessage.attachments?.[0]?.kind === "image",
+  "Attachment upload did not return image metadata"
+);
+assert(
+  attachmentMessage.attachments[0].url.startsWith("http"),
+  "Attachment upload did not return a signed URL"
+);
+console.log("✓ uploaded image attachment message");
+
 const {
   data: { conversations },
 } = await api("/api/admin/conversations", {
@@ -134,6 +200,15 @@ assert(
   beforeReplyMessages.some((message) => message.text === userText),
   "Admin detail did not include user message"
 );
+assert(
+  beforeReplyMessages.some(
+    (message) =>
+      message.text === attachmentText &&
+      message.attachments?.[0]?.mimeType === "image/png" &&
+      message.attachments[0].url.startsWith("http")
+  ),
+  "Admin detail did not include uploaded image attachment"
+);
 console.log("✓ admin detail includes user message");
 
 await api(
@@ -153,11 +228,23 @@ const {
     conversation.id
   )}/messages?userId=${encodeURIComponent(user.id)}`
 );
+const storagePaths = userMessages.flatMap((message) =>
+  message.attachments.map((attachment) => attachment.storagePath)
+);
 assert(
   userMessages.some(
     (message) => message.sender === "admin" && message.text === adminText
   ),
   "User messages endpoint did not include admin reply"
+);
+assert(
+  userMessages.some(
+    (message) =>
+      message.text === attachmentText &&
+      message.attachments?.[0]?.storagePath &&
+      message.attachments[0].url.startsWith("http")
+  ),
+  "User messages endpoint did not include uploaded attachment"
 );
 console.log("✓ user API can read admin reply");
 
@@ -166,5 +253,8 @@ await api(`/api/admin/conversations/${encodeURIComponent(conversation.id)}/archi
   headers: adminHeaders(),
 });
 console.log("✓ archived temporary conversation");
+
+await cleanupSmokeData(user.id, storagePaths);
+console.log("✓ cleaned temporary smoke data");
 
 console.log("Admin API smoke test passed");

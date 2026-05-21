@@ -55,6 +55,8 @@ export type ApiErrorCode =
   | "forbidden"
   | "not_found"
   | "conflict"
+  | "payload_too_large"
+  | "unsupported_media_type"
   | "supabase_unavailable"
   | "internal_error";
 

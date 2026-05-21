@@ -91,6 +91,31 @@ export async function createMessage(
   return data.message;
 }
 
+export async function createAttachmentMessage(input: {
+  conversationId: string;
+  userId: string;
+  file: File;
+  text?: string;
+}): Promise<Message> {
+  const formData = new FormData();
+  formData.set("conversationId", input.conversationId);
+  formData.set("userId", input.userId);
+  formData.set("file", input.file);
+  if (input.text) formData.set("text", input.text);
+
+  const response = await fetch("/api/attachments", {
+    method: "POST",
+    body: formData,
+  });
+
+  const result = (await response.json()) as ApiResult<{ message: Message }>;
+  if (!result.ok) {
+    throw new Error(result.error.message);
+  }
+
+  return result.data.message;
+}
+
 export function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   const failure = error as Partial<ApiFailure>;

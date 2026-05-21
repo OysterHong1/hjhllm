@@ -53,6 +53,19 @@ NEXT_PUBLIC_API_BASE_URL=https://hjhllm.vercel.app
 
 本地管理后台默认请求 `NEXT_PUBLIC_API_BASE_URL`；留空则请求同源 API。
 
+### 测试流程
+
+本阶段固定为两段验证：
+
+```bash
+npm run lint
+npm run build
+npm run test:smoke:local
+npm run test:smoke:vercel
+```
+
+`test:smoke:local` 需要本地 dev server 正在运行；`test:smoke:vercel` 会请求 `https://hjhllm.vercel.app`。
+
 ## 项目结构
 
 ```

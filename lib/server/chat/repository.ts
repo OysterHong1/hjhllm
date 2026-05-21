@@ -1,5 +1,6 @@
 import type {
   AdminConversation,
+  AttachmentKind,
   Conversation,
   Message,
   MessageAttachment,
@@ -48,6 +49,20 @@ type MessageRow = {
   attachments?: AttachmentRow[];
 };
 
+type CreateAttachmentMessageInput = {
+  conversationId: string;
+  userId: string;
+  text: string;
+  file: Blob;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  kind: AttachmentKind;
+};
+
+const ATTACHMENT_BUCKET = "message-attachments";
+const SIGNED_URL_TTL_SECONDS = 60 * 60;
+
 function toUser(row: UserRow): User {
   return {
     id: row.id,
@@ -94,6 +109,34 @@ function toMessage(row: MessageRow): Message {
     attachments: row.attachments?.map(toAttachment) ?? [],
     createdAt: row.created_at,
   };
+}
+
+async function signMessageAttachmentUrls(messages: Message[]): Promise<Message[]> {
+  const attachments = messages.flatMap((message) => message.attachments);
+  if (attachments.length === 0) return messages;
+
+  const supabase = createSupabaseServerClient();
+  const signedUrls = new Map<string, string>();
+
+  await Promise.all(
+    attachments.map(async (attachment) => {
+      const { data, error } = await supabase.storage
+        .from(ATTACHMENT_BUCKET)
+        .createSignedUrl(attachment.storagePath, SIGNED_URL_TTL_SECONDS);
+
+      if (!error && data?.signedUrl) {
+        signedUrls.set(attachment.storagePath, data.signedUrl);
+      }
+    })
+  );
+
+  return messages.map((message) => ({
+    ...message,
+    attachments: message.attachments.map((attachment) => ({
+      ...attachment,
+      url: signedUrls.get(attachment.storagePath) ?? attachment.url,
+    })),
+  }));
 }
 
 function makeConversationTitle(text: string): string {
@@ -207,7 +250,7 @@ export async function listConversationMessages(
     .returns<MessageRow[]>();
 
   if (error) throw new Error(error.message);
-  return data.map(toMessage);
+  return signMessageAttachmentUrls(data.map(toMessage));
 }
 
 export async function createUserMessage(
@@ -248,7 +291,125 @@ export async function createUserMessage(
 
   if (updateError) throw new Error(updateError.message);
 
-  return toMessage(data);
+  return signMessageAttachmentUrls([toMessage(data)]).then(
+    (messages) => messages[0]
+  );
+}
+
+function makeStoragePath(input: {
+  userId: string;
+  conversationId: string;
+  fileName: string;
+}): string {
+  const extension = input.fileName.split(".").pop()?.toLowerCase();
+  const safeExtension = extension?.match(/^[a-z0-9]{1,12}$/)
+    ? `.${extension}`
+    : "";
+
+  return [
+    input.userId,
+    input.conversationId,
+    `${createId()}${safeExtension}`,
+  ].join("/");
+}
+
+export async function createUserAttachmentMessage(
+  input: CreateAttachmentMessageInput
+): Promise<Message | null> {
+  const conversation = await verifyConversationOwner(
+    input.conversationId,
+    input.userId
+  );
+  if (!conversation) return null;
+
+  const supabase = createSupabaseServerClient();
+  const now = new Date().toISOString();
+  const messageId = createId();
+  const attachmentId = createId();
+  const storagePath = makeStoragePath({
+    userId: input.userId,
+    conversationId: input.conversationId,
+    fileName: input.fileName,
+  });
+
+  const { error: uploadError } = await supabase.storage
+    .from(ATTACHMENT_BUCKET)
+    .upload(storagePath, input.file, {
+      contentType: input.mimeType,
+      upsert: false,
+    });
+
+  if (uploadError) throw new Error(uploadError.message);
+
+  const { data: signedData, error: signedError } = await supabase.storage
+    .from(ATTACHMENT_BUCKET)
+    .createSignedUrl(storagePath, SIGNED_URL_TTL_SECONDS);
+
+  if (signedError) {
+    await supabase.storage.from(ATTACHMENT_BUCKET).remove([storagePath]);
+    throw new Error(signedError.message);
+  }
+
+  const { data: messageData, error: messageError } = await supabase
+    .from("messages")
+    .insert({
+      id: messageId,
+      conversation_id: input.conversationId,
+      sender: "user",
+      text: input.text,
+      created_at: now,
+    })
+    .select("id, conversation_id, sender, text, created_at")
+    .single<MessageRow>();
+
+  if (messageError) {
+    await supabase.storage.from(ATTACHMENT_BUCKET).remove([storagePath]);
+    throw new Error(messageError.message);
+  }
+
+  const { data: attachmentData, error: attachmentError } = await supabase
+    .from("attachments")
+    .insert({
+      id: attachmentId,
+      message_id: messageId,
+      kind: input.kind,
+      storage_path: storagePath,
+      url: signedData.signedUrl,
+      mime_type: input.mimeType,
+      size: input.size,
+      created_at: now,
+    })
+    .select(
+      "id, message_id, kind, storage_path, url, mime_type, size, duration_ms, width, height, thumbnail_url, created_at"
+    )
+    .single<AttachmentRow>();
+
+  if (attachmentError) {
+    await Promise.all([
+      supabase.storage.from(ATTACHMENT_BUCKET).remove([storagePath]),
+      supabase.from("messages").delete().eq("id", messageId),
+    ]);
+    throw new Error(attachmentError.message);
+  }
+
+  const updates: { updated_at: string; title?: string } = {
+    updated_at: now,
+  };
+  if (conversation.title === "新的会话") {
+    updates.title = makeConversationTitle(input.text || input.fileName);
+  }
+
+  const { error: updateError } = await supabase
+    .from("conversations")
+    .update(updates)
+    .eq("id", input.conversationId);
+
+  if (updateError) throw new Error(updateError.message);
+
+  return toMessage({
+    ...messageData,
+    attachments: [attachmentData],
+  });
 }
 
 async function getUsersById(userIds: string[]): Promise<Map<string, User>> {
@@ -370,7 +531,7 @@ async function listAdminMessages(conversationId: string): Promise<Message[]> {
     .returns<MessageRow[]>();
 
   if (error) throw new Error(error.message);
-  return data.map(toMessage);
+  return signMessageAttachmentUrls(data.map(toMessage));
 }
 
 export async function createAdminMessage(
@@ -402,7 +563,9 @@ export async function createAdminMessage(
     .eq("id", conversationId);
 
   if (updateError) throw new Error(updateError.message);
-  return toMessage(data);
+  return signMessageAttachmentUrls([toMessage(data)]).then(
+    (messages) => messages[0]
+  );
 }
 
 export async function archiveAdminConversation(
