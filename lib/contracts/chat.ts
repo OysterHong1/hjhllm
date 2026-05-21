@@ -20,6 +20,11 @@ export type Conversation = {
   updatedAt: string;
 };
 
+export type AdminConversation = Conversation & {
+  user: User | null;
+  needsReply: boolean;
+};
+
 export type Message = {
   id: string;
   conversationId: string;

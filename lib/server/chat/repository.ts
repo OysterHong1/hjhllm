@@ -1,4 +1,5 @@
 import type {
+  AdminConversation,
   Conversation,
   Message,
   MessageAttachment,
@@ -248,4 +249,182 @@ export async function createUserMessage(
   if (updateError) throw new Error(updateError.message);
 
   return toMessage(data);
+}
+
+async function getUsersById(userIds: string[]): Promise<Map<string, User>> {
+  const uniqueIds = [...new Set(userIds)];
+  const users = new Map<string, User>();
+  if (uniqueIds.length === 0) return users;
+
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("users")
+    .select("id, username, created_at, last_seen_at")
+    .in("id", uniqueIds)
+    .returns<UserRow[]>();
+
+  if (error) throw new Error(error.message);
+  for (const row of data) users.set(row.id, toUser(row));
+  return users;
+}
+
+async function getLastSenderByConversationId(
+  conversationIds: string[]
+): Promise<Map<string, MessageRow["sender"]>> {
+  const uniqueIds = [...new Set(conversationIds)];
+  const lastSenders = new Map<string, MessageRow["sender"]>();
+  if (uniqueIds.length === 0) return lastSenders;
+
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("messages")
+    .select("conversation_id, sender, created_at")
+    .in("conversation_id", uniqueIds)
+    .order("created_at", { ascending: false })
+    .returns<Pick<MessageRow, "conversation_id" | "sender" | "created_at">[]>();
+
+  if (error) throw new Error(error.message);
+  for (const row of data) {
+    if (!lastSenders.has(row.conversation_id)) {
+      lastSenders.set(row.conversation_id, row.sender);
+    }
+  }
+  return lastSenders;
+}
+
+function toAdminConversation(
+  row: ConversationRow,
+  users: Map<string, User>,
+  lastSenders: Map<string, MessageRow["sender"]>
+): AdminConversation {
+  return {
+    ...toConversation(row),
+    user: users.get(row.user_id) ?? null,
+    needsReply: lastSenders.get(row.id) === "user",
+  };
+}
+
+export async function listAdminConversations(): Promise<AdminConversation[]> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("conversations")
+    .select("id, user_id, title, status, created_at, updated_at")
+    .eq("status", "open")
+    .order("updated_at", { ascending: false })
+    .returns<ConversationRow[]>();
+
+  if (error) throw new Error(error.message);
+
+  const [users, lastSenders] = await Promise.all([
+    getUsersById(data.map((row) => row.user_id)),
+    getLastSenderByConversationId(data.map((row) => row.id)),
+  ]);
+
+  return data
+    .map((row) => toAdminConversation(row, users, lastSenders))
+    .sort((a, b) => {
+      if (a.needsReply !== b.needsReply) return a.needsReply ? -1 : 1;
+      return (
+        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      );
+    });
+}
+
+export async function getAdminConversation(
+  conversationId: string
+): Promise<{
+  conversation: AdminConversation;
+  messages: Message[];
+} | null> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("conversations")
+    .select("id, user_id, title, status, created_at, updated_at")
+    .eq("id", conversationId)
+    .maybeSingle<ConversationRow>();
+
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+
+  const [users, lastSenders, messages] = await Promise.all([
+    getUsersById([data.user_id]),
+    getLastSenderByConversationId([data.id]),
+    listAdminMessages(data.id),
+  ]);
+
+  return {
+    conversation: toAdminConversation(data, users, lastSenders),
+    messages,
+  };
+}
+
+async function listAdminMessages(conversationId: string): Promise<Message[]> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("messages")
+    .select(
+      "id, conversation_id, sender, text, created_at, attachments(id, message_id, kind, storage_path, url, mime_type, size, duration_ms, width, height, thumbnail_url, created_at)"
+    )
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: true })
+    .returns<MessageRow[]>();
+
+  if (error) throw new Error(error.message);
+  return data.map(toMessage);
+}
+
+export async function createAdminMessage(
+  conversationId: string,
+  text: string
+): Promise<Message | null> {
+  const conversation = await getAdminConversation(conversationId);
+  if (!conversation) return null;
+
+  const supabase = createSupabaseServerClient();
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("messages")
+    .insert({
+      id: createId(),
+      conversation_id: conversationId,
+      sender: "admin",
+      text,
+      created_at: now,
+    })
+    .select("id, conversation_id, sender, text, created_at")
+    .single<MessageRow>();
+
+  if (error) throw new Error(error.message);
+
+  const { error: updateError } = await supabase
+    .from("conversations")
+    .update({ updated_at: now })
+    .eq("id", conversationId);
+
+  if (updateError) throw new Error(updateError.message);
+  return toMessage(data);
+}
+
+export async function archiveAdminConversation(
+  conversationId: string
+): Promise<Conversation | null> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("conversations")
+    .update({
+      status: "archived",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", conversationId)
+    .select("id, user_id, title, status, created_at, updated_at")
+    .maybeSingle<ConversationRow>();
+
+  if (error) throw new Error(error.message);
+  return data ? toConversation(data) : null;
+}
+
+export async function resetDemoData(): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase.from("users").delete().neq("id", "");
+  if (error) throw new Error(error.message);
 }

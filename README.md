@@ -12,18 +12,19 @@
 
 ### 部署者后台
 
-1. 访问 `/admin` 查看所有用户会话
-2. 待回复会话会显示橙色标记并排在最前面
-3. 选择会话，在底部输入框输入回复并发送
-4. 用户聊天页将显示回复，Thinking 消失
-5. 点击"清空演示数据"可重置所有数据
+1. 本地配置 `ADMIN_API_TOKEN` 和 `NEXT_PUBLIC_API_BASE_URL`
+2. 运行 `npm run dev` 后访问 `/admin`
+3. 输入管理 token 查看所有用户会话
+4. 待回复会话会显示橙色标记并排在最前面
+5. 选择会话，在底部输入框输入回复并发送
+6. 用户聊天页将显示回复，Thinking 消失
 
 ## 技术栈
 
 - **框架**: Next.js 16 (App Router, Turbopack)
 - **语言**: TypeScript
 - **样式**: Tailwind CSS v4
-- **存储**: 浏览器 localStorage
+- **存储**: Supabase Postgres + Storage
 - **部署**: Vercel
 
 ## 本地开发
@@ -37,7 +38,20 @@ npm run dev
 
 - `/login` — 登录页
 - `/chat` — 用户聊天页
-- `/admin` — 管理员后台
+- `/admin` — 本地管理员后台（生产环境默认隐藏）
+
+### 环境变量
+
+复制 `.env.example` 为 `.env.local` 并填入：
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=...
+SUPABASE_SERVICE_ROLE_KEY=...
+ADMIN_API_TOKEN=...
+NEXT_PUBLIC_API_BASE_URL=https://hjhllm.vercel.app
+```
+
+本地管理后台默认请求 `NEXT_PUBLIC_API_BASE_URL`；留空则请求同源 API。
 
 ## 项目结构
 
@@ -45,7 +59,7 @@ npm run dev
 ├── app
 │   ├── login/page.tsx      # 登录页
 │   ├── chat/page.tsx       # 用户聊天页
-│   ├── admin/page.tsx      # 管理员后台
+│   ├── admin/page.tsx      # 本地管理员后台入口
 │   ├── not-found.tsx       # 404 页面
 │   ├── layout.tsx          # 根布局
 │   └── page.tsx            # 根路由 → /chat
@@ -54,7 +68,8 @@ npm run dev
 │   ├── Input.tsx
 │   └── Textarea.tsx
 ├── lib
-│   ├── store.ts            # localStorage 数据层
+│   ├── api-client          # 浏览器端 API client
+│   ├── server              # 服务端 Supabase 与 repository
 │   ├── chat.ts             # 聊天逻辑
 │   ├── ids.ts              # ID 生成
 │   └── time.ts             # 时间格式化
@@ -63,6 +78,7 @@ npm run dev
 
 ## 设计说明
 
-- 所有数据存储在浏览器 `localStorage`，无需后端或数据库
-- 部署者只能看到自己浏览器中的会话数据（同设备演示）
-- 本项目为趣味项目，第一版不做跨设备同步
+- 用户端通过 Next.js Route Handler 读写 Supabase
+- 浏览器只保存匿名 `userId`，不保存完整消息数据
+- 管理 API 使用 `Authorization: Bearer ${ADMIN_API_TOKEN}` 鉴权
+- 线上生产环境默认不暴露 `/admin` 管理 UI
