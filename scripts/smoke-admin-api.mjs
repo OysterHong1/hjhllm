@@ -23,6 +23,7 @@ loadEnvFile(resolve(process.cwd(), ".env.local"));
 loadEnvFile(resolve(process.cwd(), ".env"));
 
 const baseUrl = (
+  process.argv[2] ||
   process.env.SMOKE_BASE_URL ||
   process.env.NEXT_PUBLIC_API_BASE_URL ||
   "http://localhost:3000"
