@@ -1,12 +1,5 @@
 import Image from "next/image";
-import {
-  useRef,
-  useState,
-  type ChangeEvent,
-  type KeyboardEvent,
-  type PointerEvent,
-  type RefObject,
-} from "react";
+import type { ChangeEvent, KeyboardEvent, RefObject } from "react";
 import { Button } from "@/components/ui/Button";
 import { ErrorNotice } from "@/components/ui/ErrorNotice";
 import { IconButton } from "@/components/ui/IconButton";
@@ -59,80 +52,11 @@ export function ChatComposer({
   onCancelRecording,
   onRemoveAudio,
 }: ChatComposerProps) {
-  const [isPressCancelling, setIsPressCancelling] = useState(false);
-  const [isPressRecording, setIsPressRecording] = useState(false);
-  const pressStartYRef = useRef(0);
-  const pressPointerIdRef = useRef<number | null>(null);
-
   const hasPendingContent =
     Boolean(value.trim()) ||
     selectedImages.length > 0 ||
     Boolean(selectedAudio) ||
     Boolean(selectedVideo);
-  const recordingDisabled =
-    isSending ||
-    selectedImages.length > 0 ||
-    Boolean(selectedAudio) ||
-    Boolean(selectedVideo);
-
-  const handleRecorderClick = () => {
-    if (isPressRecording) return;
-    if (isRecording) {
-      onFinishRecording();
-      return;
-    }
-    onStartRecording();
-  };
-
-  const handleRecorderPointerDown = (
-    event: PointerEvent<HTMLButtonElement>
-  ) => {
-    if (recordingDisabled || isRecording || event.pointerType === "mouse") {
-      return;
-    }
-
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    pressPointerIdRef.current = event.pointerId;
-    pressStartYRef.current = event.clientY;
-    setIsPressCancelling(false);
-    setIsPressRecording(true);
-    onStartRecording();
-  };
-
-  const handleRecorderPointerMove = (
-    event: PointerEvent<HTMLButtonElement>
-  ) => {
-    if (pressPointerIdRef.current !== event.pointerId) return;
-    setIsPressCancelling(pressStartYRef.current - event.clientY > 72);
-  };
-
-  const finishPressRecording = (cancel: boolean) => {
-    if (!isPressRecording) return;
-    if (cancel || isPressCancelling) {
-      onCancelRecording();
-    } else {
-      onFinishRecording();
-    }
-    pressPointerIdRef.current = null;
-    setIsPressCancelling(false);
-    setIsPressRecording(false);
-  };
-
-  const handleRecorderPointerUp = (
-    event: PointerEvent<HTMLButtonElement>
-  ) => {
-    if (pressPointerIdRef.current !== event.pointerId) return;
-    event.preventDefault();
-    finishPressRecording(false);
-  };
-
-  const handleRecorderPointerCancel = (
-    event: PointerEvent<HTMLButtonElement>
-  ) => {
-    if (pressPointerIdRef.current !== event.pointerId) return;
-    finishPressRecording(true);
-  };
 
   return (
     <div className="flex-shrink-0 bg-background/95 px-3 pb-4 pt-2">
@@ -206,45 +130,22 @@ export function ChatComposer({
         )}
 
         {isRecording && (
-          <div
-            className={`mb-3 flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 shadow-sm transition-colors ${
-              isPressCancelling
-                ? "border-red-200 bg-red-50 text-red-600"
-                : "border-accent/30 bg-accent/5 text-accent"
-            }`}
-          >
-            <div className="flex min-w-0 items-center gap-3">
-              <span className="relative flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-white">
-                <span className="absolute h-full w-full animate-ping rounded-full bg-current opacity-20" />
-                <MicrophoneIcon className="relative h-5 w-5" />
-              </span>
-              <div className="min-w-0">
-                <div className="text-sm font-medium">
-                  {isPressCancelling ? "松手取消" : "松手完成语音输入"}
-                </div>
-                <div className="text-xs opacity-80">
-                  {formatAudioDuration(recordingSeconds * 1000)}
-                  {isPressRecording ? " · 上滑取消" : ""}
-                </div>
-              </div>
+          <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-accent/30 bg-accent/5 px-3 py-2">
+            <span className="text-xs text-accent">
+              录音中 {formatAudioDuration(recordingSeconds * 1000)}
+            </span>
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                className="px-3 py-1 text-xs"
+                onClick={onCancelRecording}
+              >
+                取消
+              </Button>
+              <Button className="px-3 py-1 text-xs" onClick={onFinishRecording}>
+                完成
+              </Button>
             </div>
-            {!isPressRecording && (
-              <div className="flex gap-2">
-                <Button
-                  variant="secondary"
-                  className="px-3 py-1 text-xs"
-                  onClick={onCancelRecording}
-                >
-                  取消
-                </Button>
-                <Button
-                  className="px-3 py-1 text-xs"
-                  onClick={onFinishRecording}
-                >
-                  完成
-                </Button>
-              </div>
-            )}
           </div>
         )}
 
@@ -268,17 +169,15 @@ export function ChatComposer({
           <div className="flex flex-shrink-0 items-center gap-1">
             <IconButton
               icon={<MicrophoneIcon />}
-              label={isRecording ? "完成语音输入" : "按住说话"}
-              onClick={handleRecorderClick}
-              onPointerDown={handleRecorderPointerDown}
-              onPointerMove={handleRecorderPointerMove}
-              onPointerUp={handleRecorderPointerUp}
-              onPointerCancel={handleRecorderPointerCancel}
-              onLostPointerCapture={() => finishPressRecording(true)}
-              disabled={recordingDisabled}
-              className={`touch-none ${
-                isRecording ? "bg-accent/10 text-accent" : ""
-              }`}
+              label="录音"
+              onClick={onStartRecording}
+              disabled={
+                isSending ||
+                isRecording ||
+                selectedImages.length > 0 ||
+                Boolean(selectedAudio) ||
+                Boolean(selectedVideo)
+              }
             />
             <IconButton
               icon={<PlusIcon />}
