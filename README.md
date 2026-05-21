@@ -13,12 +13,13 @@
 
 ### 部署者后台
 
-1. 本地配置 `ADMIN_API_TOKEN` 和 `NEXT_PUBLIC_API_BASE_URL`
+1. 本地配置 `ADMIN_API_TOKEN`
 2. 运行 `npm run dev` 后访问 `/admin`
-3. 输入管理 token 查看所有用户会话
+3. 管理后台会通过服务端代理自动附带管理 token
 4. 待回复会话会显示橙色标记并排在最前面
 5. 选择会话，在底部输入框输入回复并发送
 6. 用户聊天页将显示回复，Thinking 消失
+7. 点击“本地归档”可下载当前会话归档包，并自行选择保存位置
 
 ## 技术栈
 
@@ -49,10 +50,10 @@ npm run dev
 NEXT_PUBLIC_SUPABASE_URL=...
 SUPABASE_SERVICE_ROLE_KEY=...
 ADMIN_API_TOKEN=...
-NEXT_PUBLIC_API_BASE_URL=https://hjhllm.vercel.app
+ADMIN_API_BASE_URL=
 ```
 
-本地管理后台默认请求 `NEXT_PUBLIC_API_BASE_URL`；留空则请求同源 API。
+管理后台浏览器端只请求同源 `/api/admin-panel/*`，由服务端代理附带 `ADMIN_API_TOKEN` 请求管理 API。`ADMIN_API_BASE_URL` 留空时代理同源 API；需要把独立管理端指向线上应用时，设为 `https://hjhllm.vercel.app`。
 
 ### Supabase 配置
 
@@ -84,13 +85,33 @@ curl -I https://hjhllm.vercel.app/admin
 
 ### 本地管理端
 
-本地管理端建议指向线上 API：
+本地调试本项目数据时直接启动：
 
 ```bash
-NEXT_PUBLIC_API_BASE_URL=https://hjhllm.vercel.app npm run dev -- -p 3001
+npm run dev
 ```
 
-打开 http://localhost:3001/admin，输入与 Vercel Production 一致的 `ADMIN_API_TOKEN`。
+如需独立启动管理端并管理线上数据：
+
+```bash
+ADMIN_API_BASE_URL=https://hjhllm.vercel.app npm run dev -- -p 3001
+```
+
+打开 http://localhost:3001/admin。浏览器不会保存或发送管理 token，token 只由服务端代理读取 `ADMIN_API_TOKEN` 后注入到管理 API 请求中。
+
+### 本地归档
+
+管理端的“本地归档”会由本地 Next 服务端生成 zip，并触发浏览器下载框：
+
+```text
+<归档时间_用户名_标题_会话ID>.zip
+├── conversation.md
+├── img/
+├── voice/
+└── video/
+```
+
+`conversation.md` 保存会话信息、文字消息和附件相对链接；图片、语音、视频分别打包到对应目录。归档保存位置由管理员在浏览器下载流程中选择。
 
 ### 测试流程
 
@@ -141,8 +162,8 @@ npm run test:smoke:vercel
 ```
 ├── app
 │   ├── login/page.tsx      # 登录页
-│   ├── chat/page.tsx       # 用户聊天页
-│   ├── admin/page.tsx      # 本地管理员后台入口
+│   ├── chat/page.tsx       # 用户聊天页路由入口
+│   ├── admin/page.tsx      # 本地管理员后台路由入口
 │   ├── not-found.tsx       # 404 页面
 │   ├── layout.tsx          # 根布局
 │   └── page.tsx            # 根路由 → /chat
@@ -150,6 +171,9 @@ npm run test:smoke:vercel
 │   ├── Button.tsx
 │   ├── Input.tsx
 │   └── Textarea.tsx
+├── features
+│   ├── chat                # 用户聊天功能模块
+│   └── admin               # 管理后台功能模块
 ├── lib
 │   ├── api-client          # 浏览器端 API client
 │   ├── server              # 服务端 Supabase 与 repository
@@ -164,6 +188,7 @@ npm run test:smoke:vercel
 - 用户端通过 Next.js Route Handler 读写 Supabase
 - 浏览器只保存匿名 `userId`，不保存完整消息数据
 - 管理 API 使用 `Authorization: Bearer ${ADMIN_API_TOKEN}` 鉴权
+- 管理 UI 通过 `/api/admin-panel/*` 服务端代理访问管理 API，避免在浏览器暴露管理 token
 - 线上生产环境默认不暴露 `/admin` 管理 UI
 - 图片附件存储在 Supabase private bucket，通过短期 signed URL 展示
 - 语音消息通过浏览器 `MediaRecorder` 录制，并复用附件上传链路保存

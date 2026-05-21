@@ -6,19 +6,13 @@ import type {
   Message,
 } from "@/lib/contracts";
 
-const ADMIN_TOKEN_KEY = "hjhllm.adminToken";
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
+const ADMIN_PANEL_API_PREFIX = "/api/admin-panel";
 
-async function adminRequest<T>(
-  token: string,
-  path: string,
-  init?: RequestInit
-): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+async function adminRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${ADMIN_PANEL_API_PREFIX}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
       ...init?.headers,
     },
   });
@@ -31,47 +25,27 @@ async function adminRequest<T>(
   return result.data;
 }
 
-export function getStoredAdminToken(): string {
-  if (typeof window === "undefined") return "";
-  return window.localStorage.getItem(ADMIN_TOKEN_KEY) ?? "";
-}
-
-export function setStoredAdminToken(token: string): void {
-  window.localStorage.setItem(ADMIN_TOKEN_KEY, token);
-}
-
-export function clearStoredAdminToken(): void {
-  window.localStorage.removeItem(ADMIN_TOKEN_KEY);
-}
-
-export async function listAdminConversations(
-  token: string
-): Promise<AdminConversation[]> {
+export async function listAdminConversations(): Promise<AdminConversation[]> {
   const data = await adminRequest<{ conversations: AdminConversation[] }>(
-    token,
-    "/api/admin/conversations"
+    "/conversations"
   );
   return data.conversations;
 }
 
 export async function getAdminConversation(
-  token: string,
   conversationId: string
 ): Promise<{ conversation: AdminConversation; messages: Message[] }> {
   return adminRequest<{ conversation: AdminConversation; messages: Message[] }>(
-    token,
-    `/api/admin/conversations/${encodeURIComponent(conversationId)}`
+    `/conversations/${encodeURIComponent(conversationId)}`
   );
 }
 
 export async function createAdminMessage(
-  token: string,
   conversationId: string,
   text: string
 ): Promise<Message> {
   const data = await adminRequest<{ message: Message }>(
-    token,
-    `/api/admin/conversations/${encodeURIComponent(conversationId)}/messages`,
+    `/conversations/${encodeURIComponent(conversationId)}/messages`,
     {
       method: "POST",
       body: JSON.stringify({ text }),
@@ -81,12 +55,10 @@ export async function createAdminMessage(
 }
 
 export async function archiveAdminConversation(
-  token: string,
   conversationId: string
 ): Promise<Conversation> {
   const data = await adminRequest<{ conversation: Conversation }>(
-    token,
-    `/api/admin/conversations/${encodeURIComponent(conversationId)}/archive`,
+    `/conversations/${encodeURIComponent(conversationId)}/archive`,
     {
       method: "POST",
     }
@@ -94,8 +66,60 @@ export async function archiveAdminConversation(
   return data.conversation;
 }
 
-export async function resetDemoData(token: string): Promise<void> {
-  await adminRequest<{ reset: true }>(token, "/api/admin/reset-demo-data", {
+export type LocalConversationArchive = {
+  fileName: string;
+  mediaCount: number;
+  failedMediaCount: number;
+};
+
+function getDownloadFileName(response: Response): string {
+  const encodedName = response.headers.get("X-Archive-Filename");
+  if (encodedName) return decodeURIComponent(encodedName);
+
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const match = disposition.match(/filename\*=UTF-8''([^;]+)/);
+  if (match?.[1]) return decodeURIComponent(match[1]);
+
+  return "conversation-archive.zip";
+}
+
+export async function archiveAdminConversationLocally(
+  conversationId: string
+): Promise<LocalConversationArchive> {
+  const response = await fetch(
+    `${ADMIN_PANEL_API_PREFIX}/conversations/${encodeURIComponent(
+      conversationId
+    )}/archive-local`,
+    { method: "POST" }
+  );
+
+  if (!response.ok) {
+    const result = (await response.json()) as ApiFailure;
+    throw new Error(result.error.message);
+  }
+
+  const blob = await response.blob();
+  const fileName = getDownloadFileName(response);
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+
+  return {
+    fileName,
+    mediaCount: Number(response.headers.get("X-Archive-Media-Count") ?? 0),
+    failedMediaCount: Number(
+      response.headers.get("X-Archive-Failed-Media-Count") ?? 0
+    ),
+  };
+}
+
+export async function resetDemoData(): Promise<void> {
+  await adminRequest<{ reset: true }>("/reset-demo-data", {
     method: "POST",
   });
 }

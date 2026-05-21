@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import AdminClient from "./AdminClient";
+import AdminClient from "@/features/admin/AdminClient";
 
 export default function AdminPage() {
   const enabled =

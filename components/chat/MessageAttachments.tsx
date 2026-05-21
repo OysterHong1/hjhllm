@@ -1,3 +1,4 @@
+import Image from "next/image";
 import type { MessageAttachment } from "@/lib/contracts";
 import { formatAttachmentSize } from "@/lib/contracts";
 
@@ -38,12 +39,15 @@ export function MessageAttachments({ attachments }: MessageAttachmentsProps) {
               href={attachment.url}
               target="_blank"
               rel="noreferrer"
-              className="block overflow-hidden rounded-lg border border-border bg-white"
+              className="relative block min-h-52 overflow-hidden rounded-xl border border-border bg-white"
             >
-              <img
+              <Image
                 src={attachment.url}
                 alt="上传图片"
-                className="max-h-80 w-full object-contain"
+                fill
+                unoptimized
+                sizes="(max-width: 768px) 80vw, 520px"
+                className="object-contain"
               />
             </a>
           ))}

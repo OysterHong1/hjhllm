@@ -1,3 +1,4 @@
+import Image from "next/image";
 import type { Message } from "@/lib/contracts";
 import { formatTime } from "@/lib/time";
 import { MessageAttachments } from "./MessageAttachments";
@@ -31,10 +32,10 @@ export function ChatMessage({
           <div className="mb-1 text-[11px] text-muted">{senderLabel}</div>
         )}
         <div
-          className={`rounded-[22px] px-4 py-3 text-sm leading-relaxed shadow-sm ${
+          className={`rounded-[24px] px-4 py-3 text-sm leading-relaxed shadow-sm ${
             isUser
-              ? "bg-[#dbeafe] text-[#172033]"
-              : "border border-[#e6e2da] bg-white text-foreground"
+              ? "bg-[#dceeff] text-[#172033]"
+              : "border border-[#e6e8ec] bg-white text-foreground"
           }`}
         >
           <div className="space-y-2">
@@ -63,9 +64,11 @@ export function UserAvatar({ username }: { username: string }) {
 
 export function AdminAvatar() {
   return (
-    <img
+    <Image
       src="/brand/admin-avatar.jpg"
       alt=""
+      width={36}
+      height={36}
       className="h-9 w-9 flex-shrink-0 rounded-full object-cover shadow-sm"
     />
   );

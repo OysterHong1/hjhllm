@@ -5,25 +5,19 @@ import { BrandMark } from "@/components/chat/BrandMark";
 import { ChatMessage } from "@/components/chat/ChatMessage";
 import { Button } from "@/components/ui/Button";
 import { ErrorNotice } from "@/components/ui/ErrorNotice";
-import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import {
-  archiveAdminConversation,
-  clearStoredAdminToken,
+  archiveAdminConversationLocally,
   createAdminMessage,
   getAdminConversation,
   getAdminErrorMessage,
-  getStoredAdminToken,
   listAdminConversations,
   resetDemoData,
-  setStoredAdminToken,
 } from "@/lib/api-client/admin";
 import type { AdminConversation, Message } from "@/lib/contracts";
-import { formatTime } from "@/lib/time";
+import { AdminSidebar } from "./AdminSidebar";
 
 export default function AdminClient() {
-  const [adminToken, setAdminToken] = useState(() => getStoredAdminToken());
-  const [tokenInput, setTokenInput] = useState(() => getStoredAdminToken());
   const [conversations, setConversations] = useState<AdminConversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<
     string | null
@@ -35,14 +29,15 @@ export default function AdminClient() {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
   const [isReplying, setIsReplying] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [statusMessage, setStatusMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const refreshConversations = useCallback(
     async (preferredId?: string | null) => {
-      if (!adminToken) return;
-      const nextConversations = await listAdminConversations(adminToken);
+      const nextConversations = await listAdminConversations();
       setConversations(nextConversations);
 
       const nextActiveId =
@@ -56,22 +51,19 @@ export default function AdminClient() {
         setMessages([]);
       }
     },
-    [activeConversationId, adminToken]
+    [activeConversationId]
   );
 
   const refreshDetail = useCallback(
     async (conversationId: string) => {
-      if (!adminToken) return;
-      const detail = await getAdminConversation(adminToken, conversationId);
+      const detail = await getAdminConversation(conversationId);
       setActiveConversation(detail.conversation);
       setMessages(detail.messages);
     },
-    [adminToken]
+    []
   );
 
   useEffect(() => {
-    if (!adminToken) return;
-
     let cancelled = false;
     async function load() {
       setIsLoading(true);
@@ -89,10 +81,10 @@ export default function AdminClient() {
     return () => {
       cancelled = true;
     };
-  }, [adminToken, refreshConversations]);
+  }, [refreshConversations]);
 
   useEffect(() => {
-    if (!adminToken || !activeConversationId) return;
+    if (!activeConversationId) return;
 
     const currentConversationId = activeConversationId;
     let cancelled = false;
@@ -108,11 +100,9 @@ export default function AdminClient() {
     return () => {
       cancelled = true;
     };
-  }, [activeConversationId, adminToken, refreshDetail]);
+  }, [activeConversationId, refreshDetail]);
 
   useEffect(() => {
-    if (!adminToken) return;
-
     const interval = window.setInterval(async () => {
       try {
         await refreshConversations(activeConversationId);
@@ -123,51 +113,28 @@ export default function AdminClient() {
     }, 3000);
 
     return () => window.clearInterval(interval);
-  }, [
-    activeConversationId,
-    adminToken,
-    refreshConversations,
-    refreshDetail,
-  ]);
+  }, [activeConversationId, refreshConversations, refreshDetail]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length]);
-
-  const handleTokenSubmit = async () => {
-    const nextToken = tokenInput.trim();
-    if (!nextToken) return;
-    setStoredAdminToken(nextToken);
-    setAdminToken(nextToken);
-  };
-
-  const handleTokenLogout = () => {
-    clearStoredAdminToken();
-    setAdminToken("");
-    setTokenInput("");
-    setConversations([]);
-    setActiveConversationId(null);
-    setActiveConversation(null);
-    setMessages([]);
-    setErrorMessage("");
-  };
 
   const handleSelectConversation = (id: string) => {
     setActiveConversationId(id);
     setReplyContent("");
     setSidebarOpen(false);
     setErrorMessage("");
+    setStatusMessage("");
   };
 
   const handleReply = async () => {
     const content = replyContent.trim();
-    if (!content || !activeConversationId || !adminToken || isReplying) return;
+    if (!content || !activeConversationId || isReplying) return;
 
     setIsReplying(true);
     setErrorMessage("");
     try {
       const message = await createAdminMessage(
-        adminToken,
         activeConversationId,
         content
       );
@@ -183,26 +150,29 @@ export default function AdminClient() {
   };
 
   const handleArchive = async () => {
-    if (!adminToken || !activeConversationId) return;
+    if (!activeConversationId) return;
 
+    setIsArchiving(true);
     setErrorMessage("");
+    setStatusMessage("");
     try {
-      await archiveAdminConversation(adminToken, activeConversationId);
-      setActiveConversationId(null);
-      setActiveConversation(null);
-      setMessages([]);
-      await refreshConversations(null);
+      const archive = await archiveAdminConversationLocally(
+        activeConversationId
+      );
+      setStatusMessage(
+        `已生成下载：${archive.fileName}（媒体 ${archive.mediaCount} 个，失败 ${archive.failedMediaCount} 个）`
+      );
     } catch (error) {
       setErrorMessage(getAdminErrorMessage(error));
+    } finally {
+      setIsArchiving(false);
     }
   };
 
   const handleClearData = async () => {
-    if (!adminToken) return;
-
     setErrorMessage("");
     try {
-      await resetDemoData(adminToken);
+      await resetDemoData();
       setActiveConversationId(null);
       setActiveConversation(null);
       setMessages([]);
@@ -213,6 +183,20 @@ export default function AdminClient() {
     }
   };
 
+  const handleRefresh = async () => {
+    setIsLoading(true);
+    setErrorMessage("");
+    setStatusMessage("");
+    try {
+      await refreshConversations(activeConversationId);
+      if (activeConversationId) await refreshDetail(activeConversationId);
+    } catch (error) {
+      setErrorMessage(getAdminErrorMessage(error));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleReplyKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -220,123 +204,18 @@ export default function AdminClient() {
     }
   };
 
-  if (!adminToken) {
-    return (
-      <main className="flex h-full items-center justify-center bg-background px-4">
-        <div className="w-full max-w-sm rounded-lg border border-border bg-sidebar p-5">
-          <h1 className="text-base font-semibold text-foreground">
-            管理后台
-          </h1>
-          <div className="mt-4 space-y-3">
-            <Input
-              type="password"
-              placeholder="ADMIN_API_TOKEN"
-              value={tokenInput}
-              onChange={(event) => setTokenInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") void handleTokenSubmit();
-              }}
-            />
-            <Button
-              className="w-full"
-              disabled={!tokenInput.trim()}
-              onClick={handleTokenSubmit}
-            >
-              进入
-            </Button>
-            <ErrorNotice message={errorMessage} className="text-xs" />
-          </div>
-        </div>
-      </main>
-    );
-  }
-
   const sidebar = (
-    <aside className="flex h-full flex-col border-r border-border bg-sidebar/95">
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <BrandMark label="管理后台" />
-        <button
-          onClick={handleTokenLogout}
-          className="text-xs text-muted transition-colors hover:text-foreground"
-        >
-          退出
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto py-2">
-        <div className="px-4 py-2 text-xs font-medium uppercase tracking-wider text-muted">
-          会话列表
-        </div>
-        {isLoading && (
-          <div className="px-4 py-8 text-center text-xs text-muted">
-            加载中
-          </div>
-        )}
-        {!isLoading && conversations.length === 0 && (
-          <div className="px-4 py-8 text-center text-xs text-muted">
-            暂无会话
-          </div>
-        )}
-        {conversations.map((conv) => (
-          <button
-            key={conv.id}
-            onClick={() => handleSelectConversation(conv.id)}
-            className={`w-full px-4 py-3 text-left transition-colors hover:bg-white/70 ${
-              activeConversationId === conv.id ? "bg-white shadow-sm" : ""
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted">
-                {conv.user?.username ?? "未知用户"}
-              </span>
-              {conv.needsReply && (
-                <span className="inline-flex items-center rounded-full bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-accent">
-                  待回复
-                </span>
-              )}
-            </div>
-            <div className="mt-0.5 truncate text-sm text-foreground">
-              {conv.title}
-            </div>
-            <div className="mt-0.5 text-xs text-muted">
-              {formatTime(conv.updatedAt)}
-            </div>
-          </button>
-        ))}
-      </div>
-
-      <div className="border-t border-border px-4 py-3">
-        {showClearConfirm ? (
-          <div className="space-y-2">
-            <p className="text-xs text-muted">确定清空所有数据？</p>
-            <div className="flex gap-2">
-              <Button
-                variant="primary"
-                className="flex-1 text-xs"
-                onClick={handleClearData}
-              >
-                确认
-              </Button>
-              <Button
-                variant="secondary"
-                className="flex-1 text-xs"
-                onClick={() => setShowClearConfirm(false)}
-              >
-                取消
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <Button
-            variant="secondary"
-            className="w-full text-xs"
-            onClick={() => setShowClearConfirm(true)}
-          >
-            清空演示数据
-          </Button>
-        )}
-      </div>
-    </aside>
+    <AdminSidebar
+      conversations={conversations}
+      activeConversationId={activeConversationId}
+      isLoading={isLoading}
+      showClearConfirm={showClearConfirm}
+      onRefresh={() => void handleRefresh()}
+      onSelectConversation={handleSelectConversation}
+      onRequestClearData={() => setShowClearConfirm(true)}
+      onCancelClearData={() => setShowClearConfirm(false)}
+      onConfirmClearData={() => void handleClearData()}
+    />
   );
 
   return (
@@ -395,8 +274,9 @@ export default function AdminClient() {
                 variant="secondary"
                 className="text-xs"
                 onClick={handleArchive}
+                disabled={isArchiving}
               >
-                归档
+                {isArchiving ? "归档中" : "本地归档"}
               </Button>
             )}
           </div>
@@ -433,6 +313,11 @@ export default function AdminClient() {
         {errorMessage && (
           <div className="border-t border-border px-4 py-2 md:px-6">
             <ErrorNotice message={errorMessage} className="text-xs" />
+          </div>
+        )}
+        {statusMessage && (
+          <div className="border-t border-border px-4 py-2 text-xs text-muted md:px-6">
+            {statusMessage}
           </div>
         )}
 
