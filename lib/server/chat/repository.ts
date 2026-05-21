@@ -49,15 +49,19 @@ type MessageRow = {
   attachments?: AttachmentRow[];
 };
 
-type CreateAttachmentMessageInput = {
-  conversationId: string;
-  userId: string;
-  text: string;
+type CreateAttachmentFileInput = {
   file: Blob;
   fileName: string;
   mimeType: string;
   size: number;
   kind: AttachmentKind;
+};
+
+type CreateAttachmentMessageInput = {
+  conversationId: string;
+  userId: string;
+  text: string;
+  files: CreateAttachmentFileInput[];
 };
 
 const ATTACHMENT_BUCKET = "message-attachments";
@@ -325,29 +329,53 @@ export async function createUserAttachmentMessage(
   const supabase = createSupabaseServerClient();
   const now = new Date().toISOString();
   const messageId = createId();
-  const attachmentId = createId();
-  const storagePath = makeStoragePath({
-    userId: input.userId,
-    conversationId: input.conversationId,
-    fileName: input.fileName,
-  });
+  const uploadedFiles: Array<CreateAttachmentFileInput & {
+    attachmentId: string;
+    storagePath: string;
+    signedUrl: string;
+  }> = [];
 
-  const { error: uploadError } = await supabase.storage
-    .from(ATTACHMENT_BUCKET)
-    .upload(storagePath, input.file, {
-      contentType: input.mimeType,
-      upsert: false,
+  for (const file of input.files) {
+    const storagePath = makeStoragePath({
+      userId: input.userId,
+      conversationId: input.conversationId,
+      fileName: file.fileName,
     });
 
-  if (uploadError) throw new Error(uploadError.message);
+    const { error: uploadError } = await supabase.storage
+      .from(ATTACHMENT_BUCKET)
+      .upload(storagePath, file.file, {
+        contentType: file.mimeType,
+        upsert: false,
+      });
 
-  const { data: signedData, error: signedError } = await supabase.storage
-    .from(ATTACHMENT_BUCKET)
-    .createSignedUrl(storagePath, SIGNED_URL_TTL_SECONDS);
+    if (uploadError) {
+      await supabase.storage
+        .from(ATTACHMENT_BUCKET)
+        .remove(uploadedFiles.map((uploaded) => uploaded.storagePath));
+      throw new Error(uploadError.message);
+    }
 
-  if (signedError) {
-    await supabase.storage.from(ATTACHMENT_BUCKET).remove([storagePath]);
-    throw new Error(signedError.message);
+    const { data: signedData, error: signedError } = await supabase.storage
+      .from(ATTACHMENT_BUCKET)
+      .createSignedUrl(storagePath, SIGNED_URL_TTL_SECONDS);
+
+    if (signedError) {
+      await supabase.storage
+        .from(ATTACHMENT_BUCKET)
+        .remove([
+          ...uploadedFiles.map((uploaded) => uploaded.storagePath),
+          storagePath,
+        ]);
+      throw new Error(signedError.message);
+    }
+
+    uploadedFiles.push({
+      ...file,
+      attachmentId: createId(),
+      storagePath,
+      signedUrl: signedData.signedUrl,
+    });
   }
 
   const { data: messageData, error: messageError } = await supabase
@@ -363,30 +391,36 @@ export async function createUserAttachmentMessage(
     .single<MessageRow>();
 
   if (messageError) {
-    await supabase.storage.from(ATTACHMENT_BUCKET).remove([storagePath]);
+    await supabase.storage
+      .from(ATTACHMENT_BUCKET)
+      .remove(uploadedFiles.map((file) => file.storagePath));
     throw new Error(messageError.message);
   }
 
   const { data: attachmentData, error: attachmentError } = await supabase
     .from("attachments")
-    .insert({
-      id: attachmentId,
-      message_id: messageId,
-      kind: input.kind,
-      storage_path: storagePath,
-      url: signedData.signedUrl,
-      mime_type: input.mimeType,
-      size: input.size,
-      created_at: now,
-    })
+    .insert(
+      uploadedFiles.map((file) => ({
+        id: file.attachmentId,
+        message_id: messageId,
+        kind: file.kind,
+        storage_path: file.storagePath,
+        url: file.signedUrl,
+        mime_type: file.mimeType,
+        size: file.size,
+        created_at: now,
+      }))
+    )
     .select(
       "id, message_id, kind, storage_path, url, mime_type, size, duration_ms, width, height, thumbnail_url, created_at"
     )
-    .single<AttachmentRow>();
+    .returns<AttachmentRow[]>();
 
   if (attachmentError) {
     await Promise.all([
-      supabase.storage.from(ATTACHMENT_BUCKET).remove([storagePath]),
+      supabase.storage
+        .from(ATTACHMENT_BUCKET)
+        .remove(uploadedFiles.map((file) => file.storagePath)),
       supabase.from("messages").delete().eq("id", messageId),
     ]);
     throw new Error(attachmentError.message);
@@ -396,7 +430,9 @@ export async function createUserAttachmentMessage(
     updated_at: now,
   };
   if (conversation.title === "新的会话") {
-    updates.title = makeConversationTitle(input.text || input.fileName);
+    updates.title = makeConversationTitle(
+      input.text || input.files[0]?.fileName || "图片消息"
+    );
   }
 
   const { error: updateError } = await supabase
@@ -408,7 +444,7 @@ export async function createUserAttachmentMessage(
 
   return toMessage({
     ...messageData,
-    attachments: [attachmentData],
+    attachments: attachmentData,
   });
 }
 

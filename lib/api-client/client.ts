@@ -94,13 +94,15 @@ export async function createMessage(
 export async function createAttachmentMessage(input: {
   conversationId: string;
   userId: string;
-  file: File;
+  files: File[];
   text?: string;
 }): Promise<Message> {
   const formData = new FormData();
   formData.set("conversationId", input.conversationId);
   formData.set("userId", input.userId);
-  formData.set("file", input.file);
+  for (const file of input.files) {
+    formData.append("files", file);
+  }
   if (input.text) formData.set("text", input.text);
 
   const response = await fetch("/api/attachments", {

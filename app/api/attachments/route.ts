@@ -28,7 +28,10 @@ export async function POST(request: Request) {
   const userId = formData.get("userId");
   const conversationId = formData.get("conversationId");
   const text = formData.get("text");
-  const file = formData.get("file");
+  const files = [
+    ...formData.getAll("files"),
+    ...formData.getAll("file"),
+  ].filter((value): value is File => value instanceof File);
 
   if (typeof userId !== "string" || !userId.trim()) {
     return fail("bad_request", "userId is required");
@@ -36,21 +39,32 @@ export async function POST(request: Request) {
   if (typeof conversationId !== "string" || !conversationId.trim()) {
     return fail("bad_request", "conversationId is required");
   }
-  if (!(file instanceof File)) {
+  if (files.length === 0) {
     return fail("bad_request", "file is required");
   }
 
-  const kind = getAttachmentKind(file.type);
-  if (!kind) {
-    return fail("unsupported_media_type", "Unsupported attachment type", 415);
-  }
+  const normalizedFiles = [];
+  for (const file of files) {
+    const kind = getAttachmentKind(file.type);
+    if (!kind) {
+      return fail("unsupported_media_type", "Unsupported attachment type", 415);
+    }
 
-  const maxSize = MAX_UPLOAD_BYTES[kind];
-  if (file.size > maxSize) {
-    return fail("payload_too_large", "Attachment is too large", 413);
-  }
-  if (file.size === 0) {
-    return fail("bad_request", "Attachment cannot be empty");
+    const maxSize = MAX_UPLOAD_BYTES[kind];
+    if (file.size > maxSize) {
+      return fail("payload_too_large", "Attachment is too large", 413);
+    }
+    if (file.size === 0) {
+      return fail("bad_request", "Attachment cannot be empty");
+    }
+
+    normalizedFiles.push({
+      file,
+      fileName: file.name || "attachment",
+      mimeType: file.type,
+      size: file.size,
+      kind,
+    });
   }
 
   try {
@@ -58,11 +72,7 @@ export async function POST(request: Request) {
       conversationId: conversationId.trim(),
       userId: userId.trim(),
       text: typeof text === "string" ? text.trim() : "",
-      file,
-      fileName: file.name || "attachment",
-      mimeType: file.type,
-      size: file.size,
-      kind,
+      files: normalizedFiles,
     });
 
     if (!message) return fail("not_found", "Conversation not found", 404);

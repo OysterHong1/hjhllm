@@ -157,10 +157,15 @@ const attachmentForm = new FormData();
 attachmentForm.set("userId", user.id);
 attachmentForm.set("conversationId", conversation.id);
 attachmentForm.set("text", attachmentText);
-attachmentForm.set(
-  "file",
+attachmentForm.append(
+  "files",
   new Blob([pngBytes], { type: "image/png" }),
-  `smoke-${runId}.png`
+  `smoke-${runId}-1.png`
+);
+attachmentForm.append(
+  "files",
+  new Blob([pngBytes], { type: "image/png" }),
+  `smoke-${runId}-2.png`
 );
 
 const {
@@ -170,14 +175,17 @@ const {
   body: attachmentForm,
 });
 assert(
-  attachmentMessage.attachments?.[0]?.kind === "image",
-  "Attachment upload did not return image metadata"
+  attachmentMessage.attachments?.length === 2 &&
+    attachmentMessage.attachments.every((attachment) => attachment.kind === "image"),
+  "Attachment upload did not return two image metadata entries"
 );
 assert(
-  attachmentMessage.attachments[0].url.startsWith("http"),
+  attachmentMessage.attachments.every((attachment) =>
+    attachment.url.startsWith("http")
+  ),
   "Attachment upload did not return a signed URL"
 );
-console.log("✓ uploaded image attachment message");
+console.log("✓ uploaded multi-image attachment message");
 
 const {
   data: { conversations },
@@ -204,10 +212,13 @@ assert(
   beforeReplyMessages.some(
     (message) =>
       message.text === attachmentText &&
-      message.attachments?.[0]?.mimeType === "image/png" &&
-      message.attachments[0].url.startsWith("http")
+      message.attachments.length === 2 &&
+      message.attachments.every(
+        (attachment) =>
+          attachment.mimeType === "image/png" && attachment.url.startsWith("http")
+      )
   ),
-  "Admin detail did not include uploaded image attachment"
+  "Admin detail did not include uploaded image attachments"
 );
 console.log("✓ admin detail includes user message");
 
@@ -241,10 +252,12 @@ assert(
   userMessages.some(
     (message) =>
       message.text === attachmentText &&
-      message.attachments?.[0]?.storagePath &&
-      message.attachments[0].url.startsWith("http")
+      message.attachments.length === 2 &&
+      message.attachments.every(
+        (attachment) => attachment.storagePath && attachment.url.startsWith("http")
+      )
   ),
-  "User messages endpoint did not include uploaded attachment"
+  "User messages endpoint did not include uploaded attachments"
 );
 console.log("✓ user API can read admin reply");
 

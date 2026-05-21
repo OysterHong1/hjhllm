@@ -4,7 +4,9 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Textarea";
+import { MessageAttachments } from "@/components/chat/MessageAttachments";
 import {
+  createAttachmentMessage,
   createConversation,
   createMessage,
   getErrorMessage,
@@ -15,6 +17,11 @@ import {
 import { clearStoredUserId, getStoredUserId } from "@/lib/api-client/session";
 import type { Conversation, Message, User } from "@/lib/contracts";
 import { formatTime } from "@/lib/time";
+
+type SelectedImage = {
+  file: File;
+  previewUrl: string;
+};
 
 export default function ChatPage() {
   const router = useRouter();
@@ -29,7 +36,10 @@ export default function ChatPage() {
   const [isSending, setIsSending] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const selectedImagesRef = useRef<SelectedImage[]>([]);
 
   const loadMessages = useCallback(
     async (conversationId: string, userId: string) => {
@@ -131,7 +141,9 @@ export default function ChatPage() {
 
   const handleSend = async () => {
     const content = composerValue.trim();
-    if (!content || !user || isSending) return;
+    if ((!content && selectedImages.length === 0) || !user || isSending) {
+      return;
+    }
 
     setIsSending(true);
     setErrorMessage("");
@@ -145,9 +157,20 @@ export default function ChatPage() {
         setActiveConversationId(convId);
       }
 
-      const message = await createMessage(convId, user.id, content);
+      const message =
+        selectedImages.length > 0
+          ? await createAttachmentMessage({
+              conversationId: convId,
+              userId: user.id,
+              files: selectedImages.map((image) => image.file),
+              text: content,
+            })
+          : await createMessage(convId, user.id, content);
       setActiveMessages((messages) => [...messages, message]);
       setComposerValue("");
+      selectedImages.forEach((image) => URL.revokeObjectURL(image.previewUrl));
+      setSelectedImages([]);
+      if (fileInputRef.current) fileInputRef.current.value = "";
       await loadConversations(user.id, convId);
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
@@ -167,6 +190,9 @@ export default function ChatPage() {
     setActiveConversationId(null);
     setActiveMessages([]);
     setComposerValue("");
+    selectedImages.forEach((image) => URL.revokeObjectURL(image.previewUrl));
+    setSelectedImages([]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
     setSidebarOpen(false);
   };
 
@@ -186,6 +212,48 @@ export default function ChatPage() {
     clearStoredUserId();
     router.replace("/login");
   };
+
+  const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []).filter((file) =>
+      file.type.startsWith("image/")
+    );
+
+    if (files.length === 0) return;
+    setSelectedImages((current) => {
+      const incomingImages = files.map((file) => ({
+        file,
+        previewUrl: URL.createObjectURL(file),
+      }));
+      const nextImages = [...current, ...incomingImages].slice(0, 4);
+      incomingImages
+        .filter((image) => !nextImages.includes(image))
+        .forEach((image) => URL.revokeObjectURL(image.previewUrl));
+
+      return nextImages;
+    });
+    setErrorMessage("");
+  };
+
+  const handleRemoveImage = (index: number) => {
+    setSelectedImages((current) => {
+      const image = current[index];
+      if (image) URL.revokeObjectURL(image.previewUrl);
+      return current.filter((_, currentIndex) => currentIndex !== index);
+    });
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  useEffect(() => {
+    selectedImagesRef.current = selectedImages;
+  }, [selectedImages]);
+
+  useEffect(() => {
+    return () => {
+      selectedImagesRef.current.forEach((image) =>
+        URL.revokeObjectURL(image.previewUrl)
+      );
+    };
+  }, []);
 
   if (isLoading || !user) return null;
 
@@ -296,7 +364,12 @@ export default function ChatPage() {
                         : "text-foreground"
                     }`}
                   >
-                    <p className="whitespace-pre-wrap">{msg.text}</p>
+                    <div className="space-y-2">
+                      <MessageAttachments attachments={msg.attachments} />
+                      {msg.text && (
+                        <p className="whitespace-pre-wrap">{msg.text}</p>
+                      )}
+                    </div>
                   </div>
                   <div
                     className={`text-[10px] text-muted mt-1 ${
@@ -318,7 +391,48 @@ export default function ChatPage() {
         {/* Composer */}
         <div className="flex-shrink-0 border-t border-border bg-background">
           <div className="max-w-3xl mx-auto px-4 md:px-6 py-4">
+            {selectedImages.length > 0 && (
+              <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {selectedImages.map((image, index) => (
+                  <div
+                    key={image.previewUrl}
+                    className="relative aspect-square overflow-hidden rounded-lg border border-border bg-white"
+                  >
+                    <img
+                      src={image.previewUrl}
+                      alt="待发送图片"
+                      className="h-full w-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveImage(index)}
+                      className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-xs text-white"
+                      aria-label="移除图片"
+                    >
+                      x
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="flex items-end gap-2 md:gap-3">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={handleImageSelect}
+              />
+              <Button
+                variant="secondary"
+                className="h-[42px] w-[42px] flex-shrink-0 px-0"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isSending || selectedImages.length >= 4}
+                aria-label="选择图片"
+              >
+                +
+              </Button>
               <Textarea
                 placeholder="输入消息..."
                 value={composerValue}
@@ -329,7 +443,10 @@ export default function ChatPage() {
               />
               <Button
                 onClick={handleSend}
-                disabled={!composerValue.trim() || isSending}
+                disabled={
+                  (!composerValue.trim() && selectedImages.length === 0) ||
+                  isSending
+                }
               >
                 {isSending ? "发送中" : "发送"}
               </Button>

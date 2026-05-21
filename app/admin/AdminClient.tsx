@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { MessageAttachments } from "@/components/chat/MessageAttachments";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
@@ -423,7 +424,12 @@ export default function AdminClient() {
                       {" · "}
                       {formatTime(msg.createdAt)}
                     </div>
-                    <p className="whitespace-pre-wrap">{msg.text}</p>
+                    <div className="space-y-2">
+                      <MessageAttachments attachments={msg.attachments} />
+                      {msg.text && (
+                        <p className="whitespace-pre-wrap">{msg.text}</p>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

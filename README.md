@@ -7,8 +7,9 @@
 ### 普通用户体验
 
 1. 打开链接，输入任意用户名进入聊天
-2. 发送消息，页面会展示 `Thinking...` 动画
-3. 等待"AI"回复（实际上是部署者在后台手动输入）
+2. 发送文本消息，或选择图片后发送图文消息
+3. 页面会展示 `Thinking...` 动画
+4. 等待"AI"回复（实际上是部署者在后台手动输入）
 
 ### 部署者后台
 
@@ -64,7 +65,7 @@ npm run test:smoke:local
 npm run test:smoke:vercel
 ```
 
-`test:smoke:local` 需要本地 dev server 正在运行；`test:smoke:vercel` 会请求 `https://hjhllm.vercel.app`。
+`test:smoke:local` 需要本地 dev server 正在运行；`test:smoke:vercel` 会请求 `https://hjhllm.vercel.app`。Smoke 测试覆盖文本消息、管理员回复、多图附件上传、消息读取和临时数据清理。
 
 ## 项目结构
 
@@ -95,3 +96,4 @@ npm run test:smoke:vercel
 - 浏览器只保存匿名 `userId`，不保存完整消息数据
 - 管理 API 使用 `Authorization: Bearer ${ADMIN_API_TOKEN}` 鉴权
 - 线上生产环境默认不暴露 `/admin` 管理 UI
+- 图片附件存储在 Supabase private bucket，通过短期 signed URL 展示
