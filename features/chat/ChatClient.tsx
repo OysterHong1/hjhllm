@@ -47,7 +47,6 @@ export default function ChatClient() {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const videoInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedImagesRef = useRef<SelectedImage[]>([]);
   const selectedAudioRef = useRef<SelectedAudio | null>(null);
@@ -216,8 +215,9 @@ export default function ChatClient() {
       if (selectedVideo) URL.revokeObjectURL(selectedVideo.previewUrl);
       setSelectedVideo(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
-      if (videoInputRef.current) videoInputRef.current.value = "";
-      await loadConversations(user.id, convId);
+      void loadConversations(user.id, convId).catch((error) => {
+        setErrorMessage(getErrorMessage(error));
+      });
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
     } finally {
@@ -243,7 +243,6 @@ export default function ChatClient() {
     if (selectedVideo) URL.revokeObjectURL(selectedVideo.previewUrl);
     setSelectedVideo(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
-    if (videoInputRef.current) videoInputRef.current.value = "";
     setSidebarOpen(false);
   };
 
@@ -265,7 +264,34 @@ export default function ChatClient() {
   };
 
   const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files ?? []).filter((file) =>
+    const selectedFiles = Array.from(event.target.files ?? []);
+    const videoFile = selectedFiles.find((file) => file.type.startsWith("video/"));
+    if (videoFile) {
+      if (videoFile.size > ATTACHMENT_MAX_BYTES.video) {
+        setErrorMessage(
+          `视频不能超过 ${formatAttachmentSize(ATTACHMENT_MAX_BYTES.video)}`
+        );
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        return;
+      }
+
+      selectedImages.forEach((image) => URL.revokeObjectURL(image.previewUrl));
+      setSelectedImages([]);
+      if (selectedAudio) {
+        URL.revokeObjectURL(selectedAudio.previewUrl);
+        setSelectedAudio(null);
+      }
+      if (selectedVideo) URL.revokeObjectURL(selectedVideo.previewUrl);
+
+      setSelectedVideo({
+        file: videoFile,
+        previewUrl: URL.createObjectURL(videoFile),
+      });
+      setErrorMessage("");
+      return;
+    }
+
+    const files = selectedFiles.filter((file) =>
       file.type.startsWith("image/")
     );
 
@@ -302,39 +328,10 @@ export default function ChatClient() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const handleVideoSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = Array.from(event.target.files ?? []).find((item) =>
-      item.type.startsWith("video/")
-    );
-
-    if (!file) return;
-    if (file.size > ATTACHMENT_MAX_BYTES.video) {
-      setErrorMessage(
-        `视频不能超过 ${formatAttachmentSize(ATTACHMENT_MAX_BYTES.video)}`
-      );
-      if (videoInputRef.current) videoInputRef.current.value = "";
-      return;
-    }
-
-    selectedImages.forEach((image) => URL.revokeObjectURL(image.previewUrl));
-    setSelectedImages([]);
-    if (selectedAudio) {
-      URL.revokeObjectURL(selectedAudio.previewUrl);
-      setSelectedAudio(null);
-    }
-    if (selectedVideo) URL.revokeObjectURL(selectedVideo.previewUrl);
-
-    setSelectedVideo({
-      file,
-      previewUrl: URL.createObjectURL(file),
-    });
-    setErrorMessage("");
-  };
-
   const handleRemoveVideo = () => {
     if (selectedVideo) URL.revokeObjectURL(selectedVideo.previewUrl);
     setSelectedVideo(null);
-    if (videoInputRef.current) videoInputRef.current.value = "";
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const stopRecordingTracks = () => {
@@ -550,13 +547,11 @@ export default function ChatClient() {
           isSending={isSending}
           recordingSeconds={recordingSeconds}
           fileInputRef={fileInputRef}
-          videoInputRef={videoInputRef}
           onChangeValue={setComposerValue}
           onSend={() => void handleSend()}
           onKeyDown={handleKeyDown}
           onImageSelect={handleImageSelect}
           onRemoveImage={handleRemoveImage}
-          onVideoSelect={handleVideoSelect}
           onRemoveVideo={handleRemoveVideo}
           onStartRecording={() => void handleStartRecording()}
           onFinishRecording={handleFinishRecording}

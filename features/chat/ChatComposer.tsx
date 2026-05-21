@@ -4,12 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { ErrorNotice } from "@/components/ui/ErrorNotice";
 import { IconButton } from "@/components/ui/IconButton";
 import { Textarea } from "@/components/ui/Textarea";
-import {
-  CameraIcon,
-  MicrophoneIcon,
-  PlusIcon,
-  VideoIcon,
-} from "@/components/ui/icons";
+import { MicrophoneIcon, PlusIcon } from "@/components/ui/icons";
 import { formatAttachmentSize } from "@/lib/contracts";
 import type { SelectedAudio, SelectedImage, SelectedVideo } from "./types";
 import { formatAudioDuration } from "./utils";
@@ -24,13 +19,11 @@ type ChatComposerProps = {
   isSending: boolean;
   recordingSeconds: number;
   fileInputRef: RefObject<HTMLInputElement | null>;
-  videoInputRef: RefObject<HTMLInputElement | null>;
   onChangeValue: (value: string) => void;
   onSend: () => void;
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   onImageSelect: (event: ChangeEvent<HTMLInputElement>) => void;
   onRemoveImage: (index: number) => void;
-  onVideoSelect: (event: ChangeEvent<HTMLInputElement>) => void;
   onRemoveVideo: () => void;
   onStartRecording: () => void;
   onFinishRecording: () => void;
@@ -48,13 +41,11 @@ export function ChatComposer({
   isSending,
   recordingSeconds,
   fileInputRef,
-  videoInputRef,
   onChangeValue,
   onSend,
   onKeyDown,
   onImageSelect,
   onRemoveImage,
-  onVideoSelect,
   onRemoveVideo,
   onStartRecording,
   onFinishRecording,
@@ -162,32 +153,13 @@ export function ChatComposer({
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept="image/*,video/*"
             multiple
             className="hidden"
             onChange={onImageSelect}
           />
-          <input
-            ref={videoInputRef}
-            type="file"
-            accept="video/*"
-            className="hidden"
-            onChange={onVideoSelect}
-          />
-          <IconButton
-            icon={<CameraIcon />}
-            label="选择图片"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={
-              isSending ||
-              isRecording ||
-              selectedImages.length >= 4 ||
-              Boolean(selectedAudio) ||
-              Boolean(selectedVideo)
-            }
-          />
           <Textarea
-            placeholder="发消息或按住说话..."
+            placeholder="快发消息给我..."
             value={value}
             onChange={(event) => onChangeValue(event.target.value)}
             onKeyDown={onKeyDown}
@@ -208,26 +180,13 @@ export function ChatComposer({
               }
             />
             <IconButton
-              icon={<VideoIcon />}
-              label="选择视频"
-              onClick={() => videoInputRef.current?.click()}
-              disabled={
-                isSending ||
-                isRecording ||
-                selectedImages.length > 0 ||
-                Boolean(selectedAudio) ||
-                Boolean(selectedVideo)
-              }
-              className="hidden sm:inline-flex"
-            />
-            <IconButton
               icon={<PlusIcon />}
               label="更多附件"
-              onClick={() => videoInputRef.current?.click()}
+              onClick={() => fileInputRef.current?.click()}
               disabled={
                 isSending ||
                 isRecording ||
-                selectedImages.length > 0 ||
+                selectedImages.length >= 4 ||
                 Boolean(selectedAudio) ||
                 Boolean(selectedVideo)
               }

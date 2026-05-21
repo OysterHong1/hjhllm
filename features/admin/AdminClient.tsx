@@ -140,8 +140,12 @@ export default function AdminClient() {
       );
       setMessages((current) => [...current, message]);
       setReplyContent("");
-      await refreshConversations(activeConversationId);
-      await refreshDetail(activeConversationId);
+      void refreshConversations(activeConversationId).catch((error) => {
+        setErrorMessage(getAdminErrorMessage(error));
+      });
+      void refreshDetail(activeConversationId).catch((error) => {
+        setErrorMessage(getAdminErrorMessage(error));
+      });
     } catch (error) {
       setErrorMessage(getAdminErrorMessage(error));
     } finally {

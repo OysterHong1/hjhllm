@@ -21,7 +21,11 @@ export function ChatMessage({
     roleLabel ?? (isUser ? username || "用户" : "HJH LLM");
 
   return (
-    <div className={`flex gap-3 ${isUser ? "justify-end" : "justify-start"}`}>
+    <div
+      className={`animate-message-in flex gap-3 ${
+        isUser ? "justify-end" : "justify-start"
+      }`}
+    >
       {!isUser && <AdminAvatar />}
       <div
         className={`flex max-w-[82%] flex-col ${

@@ -1,6 +1,7 @@
 import Image from "next/image";
 import type { MessageAttachment } from "@/lib/contracts";
 import { formatAttachmentSize } from "@/lib/contracts";
+import { AudioBubble } from "./AudioBubble";
 
 type MessageAttachmentsProps = {
   attachments: MessageAttachment[];
@@ -55,16 +56,11 @@ export function MessageAttachments({ attachments }: MessageAttachmentsProps) {
       )}
 
       {audioAttachments.map((attachment) => (
-        <div
+        <AudioBubble
           key={attachment.id}
-          className="rounded-lg border border-border bg-white p-2"
-        >
-          <audio controls src={attachment.url} className="h-9 w-full" />
-          <div className="mt-1 text-[10px] text-muted">
-            语音 · {formatAttachmentSize(attachment.size)}
-            {attachment.durationMs ? ` · ${formatDuration(attachment.durationMs)}` : ""}
-          </div>
-        </div>
+          src={attachment.url}
+          durationMs={attachment.durationMs}
+        />
       ))}
 
       {videoAttachments.map((attachment) => (
@@ -92,11 +88,4 @@ export function MessageAttachments({ attachments }: MessageAttachmentsProps) {
       ))}
     </div>
   );
-}
-
-function formatDuration(durationMs: number): string {
-  const totalSeconds = Math.max(1, Math.round(durationMs / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }

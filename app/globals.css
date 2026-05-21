@@ -24,3 +24,18 @@ input,
 textarea {
   letter-spacing: 0;
 }
+
+@keyframes message-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-message-in {
+  animation: message-in 180ms ease-out;
+}
