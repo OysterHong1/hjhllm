@@ -110,6 +110,7 @@ const runId = Date.now().toString(36);
 const username = `smoke-admin-${runId}`;
 const userText = `smoke user message ${runId}`;
 const attachmentText = `smoke attachment message ${runId}`;
+const audioText = `smoke audio message ${runId}`;
 const adminText = `smoke admin reply ${runId}`;
 
 console.log(`Admin smoke target: ${baseUrl}`);
@@ -187,6 +188,37 @@ assert(
 );
 console.log("✓ uploaded multi-image attachment message");
 
+const audioForm = new FormData();
+audioForm.set("userId", user.id);
+audioForm.set("conversationId", conversation.id);
+audioForm.set("text", audioText);
+audioForm.set("durationMs", "1200");
+audioForm.append(
+  "files",
+  new Blob([new Uint8Array([0x1a, 0x45, 0xdf, 0xa3])], {
+    type: "audio/webm",
+  }),
+  `smoke-${runId}.webm`
+);
+
+const {
+  data: { message: audioMessage },
+} = await api("/api/attachments", {
+  method: "POST",
+  body: audioForm,
+});
+assert(
+  audioMessage.attachments?.length === 1 &&
+    audioMessage.attachments[0].kind === "audio" &&
+    audioMessage.attachments[0].durationMs === 1200,
+  "Audio upload did not return audio metadata"
+);
+assert(
+  audioMessage.attachments[0].url.startsWith("http"),
+  "Audio upload did not return a signed URL"
+);
+console.log("✓ uploaded audio attachment message");
+
 const {
   data: { conversations },
 } = await api("/api/admin/conversations", {
@@ -220,7 +252,17 @@ assert(
   ),
   "Admin detail did not include uploaded image attachments"
 );
-console.log("✓ admin detail includes user message");
+assert(
+  beforeReplyMessages.some(
+    (message) =>
+      message.text === audioText &&
+      message.attachments.length === 1 &&
+      message.attachments[0].kind === "audio" &&
+      message.attachments[0].url.startsWith("http")
+  ),
+  "Admin detail did not include uploaded audio attachment"
+);
+console.log("✓ admin detail includes user and attachment messages");
 
 await api(
   `/api/admin/conversations/${encodeURIComponent(conversation.id)}/messages`,
@@ -258,6 +300,17 @@ assert(
       )
   ),
   "User messages endpoint did not include uploaded attachments"
+);
+assert(
+  userMessages.some(
+    (message) =>
+      message.text === audioText &&
+      message.attachments.length === 1 &&
+      message.attachments[0].kind === "audio" &&
+      message.attachments[0].durationMs === 1200 &&
+      message.attachments[0].url.startsWith("http")
+  ),
+  "User messages endpoint did not include uploaded audio"
 );
 console.log("✓ user API can read admin reply");
 

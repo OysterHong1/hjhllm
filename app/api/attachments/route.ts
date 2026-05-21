@@ -28,6 +28,7 @@ export async function POST(request: Request) {
   const userId = formData.get("userId");
   const conversationId = formData.get("conversationId");
   const text = formData.get("text");
+  const durationMsValue = formData.get("durationMs");
   const files = [
     ...formData.getAll("files"),
     ...formData.getAll("file"),
@@ -58,12 +59,18 @@ export async function POST(request: Request) {
       return fail("bad_request", "Attachment cannot be empty");
     }
 
+    const durationMs =
+      typeof durationMsValue === "string" && durationMsValue.trim()
+        ? Number(durationMsValue)
+        : null;
+
     normalizedFiles.push({
       file,
       fileName: file.name || "attachment",
       mimeType: file.type,
       size: file.size,
       kind,
+      durationMs: Number.isFinite(durationMs) ? durationMs : null,
     });
   }
 

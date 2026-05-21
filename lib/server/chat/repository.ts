@@ -55,6 +55,7 @@ type CreateAttachmentFileInput = {
   mimeType: string;
   size: number;
   kind: AttachmentKind;
+  durationMs?: number | null;
 };
 
 type CreateAttachmentMessageInput = {
@@ -408,6 +409,7 @@ export async function createUserAttachmentMessage(
         url: file.signedUrl,
         mime_type: file.mimeType,
         size: file.size,
+        duration_ms: file.durationMs ?? null,
         created_at: now,
       }))
     )

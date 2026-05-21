@@ -23,6 +23,12 @@ type SelectedImage = {
   previewUrl: string;
 };
 
+type SelectedAudio = {
+  file: File;
+  previewUrl: string;
+  durationMs: number;
+};
+
 export default function ChatPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
@@ -37,9 +43,19 @@ export default function ChatPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
+  const [selectedAudio, setSelectedAudio] = useState<SelectedAudio | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedImagesRef = useRef<SelectedImage[]>([]);
+  const selectedAudioRef = useRef<SelectedAudio | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioChunksRef = useRef<BlobPart[]>([]);
+  const recordingStartedAtRef = useRef(0);
+  const recordingTimerRef = useRef<number | null>(null);
+  const discardRecordingRef = useRef(false);
 
   const loadMessages = useCallback(
     async (conversationId: string, userId: string) => {
@@ -141,7 +157,12 @@ export default function ChatPage() {
 
   const handleSend = async () => {
     const content = composerValue.trim();
-    if ((!content && selectedImages.length === 0) || !user || isSending) {
+    if (
+      (!content && selectedImages.length === 0 && !selectedAudio) ||
+      !user ||
+      isSending ||
+      isRecording
+    ) {
       return;
     }
 
@@ -158,7 +179,15 @@ export default function ChatPage() {
       }
 
       const message =
-        selectedImages.length > 0
+        selectedAudio
+          ? await createAttachmentMessage({
+              conversationId: convId,
+              userId: user.id,
+              files: [selectedAudio.file],
+              text: content,
+              durationMs: selectedAudio.durationMs,
+            })
+          : selectedImages.length > 0
           ? await createAttachmentMessage({
               conversationId: convId,
               userId: user.id,
@@ -170,6 +199,8 @@ export default function ChatPage() {
       setComposerValue("");
       selectedImages.forEach((image) => URL.revokeObjectURL(image.previewUrl));
       setSelectedImages([]);
+      if (selectedAudio) URL.revokeObjectURL(selectedAudio.previewUrl);
+      setSelectedAudio(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
       await loadConversations(user.id, convId);
     } catch (error) {
@@ -192,6 +223,8 @@ export default function ChatPage() {
     setComposerValue("");
     selectedImages.forEach((image) => URL.revokeObjectURL(image.previewUrl));
     setSelectedImages([]);
+    if (selectedAudio) URL.revokeObjectURL(selectedAudio.previewUrl);
+    setSelectedAudio(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
     setSidebarOpen(false);
   };
@@ -219,6 +252,10 @@ export default function ChatPage() {
     );
 
     if (files.length === 0) return;
+    if (selectedAudio) {
+      URL.revokeObjectURL(selectedAudio.previewUrl);
+      setSelectedAudio(null);
+    }
     setSelectedImages((current) => {
       const incomingImages = files.map((file) => ({
         file,
@@ -243,15 +280,124 @@ export default function ChatPage() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  const stopRecordingTracks = () => {
+    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    mediaStreamRef.current = null;
+  };
+
+  const clearRecordingTimer = () => {
+    if (recordingTimerRef.current) {
+      window.clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+  };
+
+  const handleStartRecording = async () => {
+    if (isSending || selectedImages.length > 0 || isRecording) return;
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+      setErrorMessage("当前浏览器不支持录音");
+      return;
+    }
+
+    try {
+      if (selectedAudio) URL.revokeObjectURL(selectedAudio.previewUrl);
+      setSelectedAudio(null);
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm")
+        ? "audio/webm"
+        : "";
+      const recorder = new MediaRecorder(
+        stream,
+        mimeType ? { mimeType } : undefined
+      );
+
+      audioChunksRef.current = [];
+      discardRecordingRef.current = false;
+      recordingStartedAtRef.current = Date.now();
+      mediaStreamRef.current = stream;
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) audioChunksRef.current.push(event.data);
+      };
+
+      recorder.onstop = () => {
+        clearRecordingTimer();
+        stopRecordingTracks();
+        setIsRecording(false);
+        setRecordingSeconds(0);
+
+        if (discardRecordingRef.current || audioChunksRef.current.length === 0) {
+          audioChunksRef.current = [];
+          return;
+        }
+
+        const type = recorder.mimeType || "audio/webm";
+        const blob = new Blob(audioChunksRef.current, { type });
+        audioChunksRef.current = [];
+        const durationMs = Math.max(1000, Date.now() - recordingStartedAtRef.current);
+        const extension = type.includes("mp4") ? "m4a" : "webm";
+        const file = new File([blob], `recording-${Date.now()}.${extension}`, {
+          type,
+        });
+        setSelectedAudio({
+          file,
+          previewUrl: URL.createObjectURL(blob),
+          durationMs,
+        });
+      };
+
+      recorder.start();
+      setIsRecording(true);
+      setRecordingSeconds(0);
+      recordingTimerRef.current = window.setInterval(() => {
+        setRecordingSeconds(
+          Math.max(1, Math.floor((Date.now() - recordingStartedAtRef.current) / 1000))
+        );
+      }, 500);
+      setErrorMessage("");
+    } catch {
+      stopRecordingTracks();
+      setIsRecording(false);
+      setErrorMessage("无法开始录音，请检查麦克风权限");
+    }
+  };
+
+  const handleFinishRecording = () => {
+    if (!mediaRecorderRef.current || !isRecording) return;
+    discardRecordingRef.current = false;
+    mediaRecorderRef.current.stop();
+  };
+
+  const handleCancelRecording = () => {
+    if (!mediaRecorderRef.current || !isRecording) return;
+    discardRecordingRef.current = true;
+    mediaRecorderRef.current.stop();
+  };
+
+  const handleRemoveAudio = () => {
+    if (selectedAudio) URL.revokeObjectURL(selectedAudio.previewUrl);
+    setSelectedAudio(null);
+  };
+
   useEffect(() => {
     selectedImagesRef.current = selectedImages;
   }, [selectedImages]);
+
+  useEffect(() => {
+    selectedAudioRef.current = selectedAudio;
+  }, [selectedAudio]);
 
   useEffect(() => {
     return () => {
       selectedImagesRef.current.forEach((image) =>
         URL.revokeObjectURL(image.previewUrl)
       );
+      if (selectedAudioRef.current) {
+        URL.revokeObjectURL(selectedAudioRef.current.previewUrl);
+      }
+      clearRecordingTimer();
+      stopRecordingTracks();
     };
   }, []);
 
@@ -415,6 +561,49 @@ export default function ChatPage() {
                 ))}
               </div>
             )}
+            {selectedAudio && (
+              <div className="mb-3 rounded-lg border border-border bg-white p-3">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <span className="text-xs text-muted">
+                    语音 {formatAudioDuration(selectedAudio.durationMs)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleRemoveAudio}
+                    className="text-xs text-muted transition-colors hover:text-foreground"
+                  >
+                    移除
+                  </button>
+                </div>
+                <audio
+                  controls
+                  src={selectedAudio.previewUrl}
+                  className="h-9 w-full"
+                />
+              </div>
+            )}
+            {isRecording && (
+              <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-accent/30 bg-accent/5 px-3 py-2">
+                <span className="text-xs text-accent">
+                  录音中 {formatAudioDuration(recordingSeconds * 1000)}
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    variant="secondary"
+                    className="px-3 py-1 text-xs"
+                    onClick={handleCancelRecording}
+                  >
+                    取消
+                  </Button>
+                  <Button
+                    className="px-3 py-1 text-xs"
+                    onClick={handleFinishRecording}
+                  >
+                    完成
+                  </Button>
+                </div>
+              </div>
+            )}
             <div className="flex items-end gap-2 md:gap-3">
               <input
                 ref={fileInputRef}
@@ -428,10 +617,28 @@ export default function ChatPage() {
                 variant="secondary"
                 className="h-[42px] w-[42px] flex-shrink-0 px-0"
                 onClick={() => fileInputRef.current?.click()}
-                disabled={isSending || selectedImages.length >= 4}
+                disabled={
+                  isSending ||
+                  isRecording ||
+                  selectedImages.length >= 4 ||
+                  Boolean(selectedAudio)
+                }
                 aria-label="选择图片"
               >
                 +
+              </Button>
+              <Button
+                variant="secondary"
+                className="h-[42px] flex-shrink-0 px-3"
+                onClick={handleStartRecording}
+                disabled={
+                  isSending ||
+                  isRecording ||
+                  selectedImages.length > 0 ||
+                  Boolean(selectedAudio)
+                }
+              >
+                录音
               </Button>
               <Textarea
                 placeholder="输入消息..."
@@ -444,7 +651,10 @@ export default function ChatPage() {
               <Button
                 onClick={handleSend}
                 disabled={
-                  (!composerValue.trim() && selectedImages.length === 0) ||
+                  (!composerValue.trim() &&
+                    selectedImages.length === 0 &&
+                    !selectedAudio) ||
+                  isRecording ||
                   isSending
                 }
               >
@@ -459,6 +669,13 @@ export default function ChatPage() {
       </main>
     </div>
   );
+}
+
+function formatAudioDuration(durationMs: number): string {
+  const totalSeconds = Math.max(0, Math.round(durationMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
 function ThinkingBubble() {
