@@ -111,6 +111,7 @@ const username = `smoke-admin-${runId}`;
 const userText = `smoke user message ${runId}`;
 const attachmentText = `smoke attachment message ${runId}`;
 const audioText = `smoke audio message ${runId}`;
+const videoText = `smoke video message ${runId}`;
 const adminText = `smoke admin reply ${runId}`;
 
 console.log(`Admin smoke target: ${baseUrl}`);
@@ -219,6 +220,36 @@ assert(
 );
 console.log("✓ uploaded audio attachment message");
 
+const videoForm = new FormData();
+videoForm.set("userId", user.id);
+videoForm.set("conversationId", conversation.id);
+videoForm.set("text", videoText);
+videoForm.append(
+  "files",
+  new Blob([new Uint8Array([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70])], {
+    type: "video/mp4",
+  }),
+  `smoke-${runId}.mp4`
+);
+
+const {
+  data: { message: videoMessage },
+} = await api("/api/attachments", {
+  method: "POST",
+  body: videoForm,
+});
+assert(
+  videoMessage.attachments?.length === 1 &&
+    videoMessage.attachments[0].kind === "video" &&
+    videoMessage.attachments[0].mimeType === "video/mp4",
+  "Video upload did not return video metadata"
+);
+assert(
+  videoMessage.attachments[0].url.startsWith("http"),
+  "Video upload did not return a signed URL"
+);
+console.log("✓ uploaded video attachment message");
+
 const {
   data: { conversations },
 } = await api("/api/admin/conversations", {
@@ -261,6 +292,16 @@ assert(
       message.attachments[0].url.startsWith("http")
   ),
   "Admin detail did not include uploaded audio attachment"
+);
+assert(
+  beforeReplyMessages.some(
+    (message) =>
+      message.text === videoText &&
+      message.attachments.length === 1 &&
+      message.attachments[0].kind === "video" &&
+      message.attachments[0].url.startsWith("http")
+  ),
+  "Admin detail did not include uploaded video attachment"
 );
 console.log("✓ admin detail includes user and attachment messages");
 
@@ -311,6 +352,16 @@ assert(
       message.attachments[0].url.startsWith("http")
   ),
   "User messages endpoint did not include uploaded audio"
+);
+assert(
+  userMessages.some(
+    (message) =>
+      message.text === videoText &&
+      message.attachments.length === 1 &&
+      message.attachments[0].kind === "video" &&
+      message.attachments[0].url.startsWith("http")
+  ),
+  "User messages endpoint did not include uploaded video"
 );
 console.log("✓ user API can read admin reply");
 

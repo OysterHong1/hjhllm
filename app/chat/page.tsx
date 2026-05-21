@@ -15,7 +15,13 @@ import {
   restoreUserSession,
 } from "@/lib/api-client/client";
 import { clearStoredUserId, getStoredUserId } from "@/lib/api-client/session";
-import type { Conversation, Message, User } from "@/lib/contracts";
+import {
+  ATTACHMENT_MAX_BYTES,
+  formatAttachmentSize,
+  type Conversation,
+  type Message,
+  type User,
+} from "@/lib/contracts";
 import { formatTime } from "@/lib/time";
 
 type SelectedImage = {
@@ -27,6 +33,11 @@ type SelectedAudio = {
   file: File;
   previewUrl: string;
   durationMs: number;
+};
+
+type SelectedVideo = {
+  file: File;
+  previewUrl: string;
 };
 
 export default function ChatPage() {
@@ -44,12 +55,15 @@ export default function ChatPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
   const [selectedAudio, setSelectedAudio] = useState<SelectedAudio | null>(null);
+  const [selectedVideo, setSelectedVideo] = useState<SelectedVideo | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedImagesRef = useRef<SelectedImage[]>([]);
   const selectedAudioRef = useRef<SelectedAudio | null>(null);
+  const selectedVideoRef = useRef<SelectedVideo | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
@@ -158,7 +172,10 @@ export default function ChatPage() {
   const handleSend = async () => {
     const content = composerValue.trim();
     if (
-      (!content && selectedImages.length === 0 && !selectedAudio) ||
+      (!content &&
+        selectedImages.length === 0 &&
+        !selectedAudio &&
+        !selectedVideo) ||
       !user ||
       isSending ||
       isRecording
@@ -187,6 +204,13 @@ export default function ChatPage() {
               text: content,
               durationMs: selectedAudio.durationMs,
             })
+          : selectedVideo
+          ? await createAttachmentMessage({
+              conversationId: convId,
+              userId: user.id,
+              files: [selectedVideo.file],
+              text: content,
+            })
           : selectedImages.length > 0
           ? await createAttachmentMessage({
               conversationId: convId,
@@ -201,7 +225,10 @@ export default function ChatPage() {
       setSelectedImages([]);
       if (selectedAudio) URL.revokeObjectURL(selectedAudio.previewUrl);
       setSelectedAudio(null);
+      if (selectedVideo) URL.revokeObjectURL(selectedVideo.previewUrl);
+      setSelectedVideo(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
+      if (videoInputRef.current) videoInputRef.current.value = "";
       await loadConversations(user.id, convId);
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
@@ -225,7 +252,10 @@ export default function ChatPage() {
     setSelectedImages([]);
     if (selectedAudio) URL.revokeObjectURL(selectedAudio.previewUrl);
     setSelectedAudio(null);
+    if (selectedVideo) URL.revokeObjectURL(selectedVideo.previewUrl);
+    setSelectedVideo(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
+    if (videoInputRef.current) videoInputRef.current.value = "";
     setSidebarOpen(false);
   };
 
@@ -256,6 +286,10 @@ export default function ChatPage() {
       URL.revokeObjectURL(selectedAudio.previewUrl);
       setSelectedAudio(null);
     }
+    if (selectedVideo) {
+      URL.revokeObjectURL(selectedVideo.previewUrl);
+      setSelectedVideo(null);
+    }
     setSelectedImages((current) => {
       const incomingImages = files.map((file) => ({
         file,
@@ -280,6 +314,41 @@ export default function ChatPage() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  const handleVideoSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = Array.from(event.target.files ?? []).find((item) =>
+      item.type.startsWith("video/")
+    );
+
+    if (!file) return;
+    if (file.size > ATTACHMENT_MAX_BYTES.video) {
+      setErrorMessage(
+        `视频不能超过 ${formatAttachmentSize(ATTACHMENT_MAX_BYTES.video)}`
+      );
+      if (videoInputRef.current) videoInputRef.current.value = "";
+      return;
+    }
+
+    selectedImages.forEach((image) => URL.revokeObjectURL(image.previewUrl));
+    setSelectedImages([]);
+    if (selectedAudio) {
+      URL.revokeObjectURL(selectedAudio.previewUrl);
+      setSelectedAudio(null);
+    }
+    if (selectedVideo) URL.revokeObjectURL(selectedVideo.previewUrl);
+
+    setSelectedVideo({
+      file,
+      previewUrl: URL.createObjectURL(file),
+    });
+    setErrorMessage("");
+  };
+
+  const handleRemoveVideo = () => {
+    if (selectedVideo) URL.revokeObjectURL(selectedVideo.previewUrl);
+    setSelectedVideo(null);
+    if (videoInputRef.current) videoInputRef.current.value = "";
+  };
+
   const stopRecordingTracks = () => {
     mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
     mediaStreamRef.current = null;
@@ -293,7 +362,14 @@ export default function ChatPage() {
   };
 
   const handleStartRecording = async () => {
-    if (isSending || selectedImages.length > 0 || isRecording) return;
+    if (
+      isSending ||
+      selectedImages.length > 0 ||
+      Boolean(selectedVideo) ||
+      isRecording
+    ) {
+      return;
+    }
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
       setErrorMessage("当前浏览器不支持录音");
       return;
@@ -389,12 +465,19 @@ export default function ChatPage() {
   }, [selectedAudio]);
 
   useEffect(() => {
+    selectedVideoRef.current = selectedVideo;
+  }, [selectedVideo]);
+
+  useEffect(() => {
     return () => {
       selectedImagesRef.current.forEach((image) =>
         URL.revokeObjectURL(image.previewUrl)
       );
       if (selectedAudioRef.current) {
         URL.revokeObjectURL(selectedAudioRef.current.previewUrl);
+      }
+      if (selectedVideoRef.current) {
+        URL.revokeObjectURL(selectedVideoRef.current.previewUrl);
       }
       clearRecordingTimer();
       stopRecordingTracks();
@@ -582,6 +665,27 @@ export default function ChatPage() {
                 />
               </div>
             )}
+            {selectedVideo && (
+              <div className="mb-3 rounded-lg border border-border bg-white p-3">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <span className="text-xs text-muted">
+                    视频 · {formatAttachmentSize(selectedVideo.file.size)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleRemoveVideo}
+                    className="text-xs text-muted transition-colors hover:text-foreground"
+                  >
+                    移除
+                  </button>
+                </div>
+                <video
+                  controls
+                  src={selectedVideo.previewUrl}
+                  className="max-h-72 w-full rounded-md bg-black"
+                />
+              </div>
+            )}
             {isRecording && (
               <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-accent/30 bg-accent/5 px-3 py-2">
                 <span className="text-xs text-accent">
@@ -613,6 +717,13 @@ export default function ChatPage() {
                 className="hidden"
                 onChange={handleImageSelect}
               />
+              <input
+                ref={videoInputRef}
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={handleVideoSelect}
+              />
               <Button
                 variant="secondary"
                 className="h-[42px] w-[42px] flex-shrink-0 px-0"
@@ -621,11 +732,26 @@ export default function ChatPage() {
                   isSending ||
                   isRecording ||
                   selectedImages.length >= 4 ||
-                  Boolean(selectedAudio)
+                  Boolean(selectedAudio) ||
+                  Boolean(selectedVideo)
                 }
                 aria-label="选择图片"
               >
                 +
+              </Button>
+              <Button
+                variant="secondary"
+                className="h-[42px] flex-shrink-0 px-3"
+                onClick={() => videoInputRef.current?.click()}
+                disabled={
+                  isSending ||
+                  isRecording ||
+                  selectedImages.length > 0 ||
+                  Boolean(selectedAudio) ||
+                  Boolean(selectedVideo)
+                }
+              >
+                视频
               </Button>
               <Button
                 variant="secondary"
@@ -635,7 +761,8 @@ export default function ChatPage() {
                   isSending ||
                   isRecording ||
                   selectedImages.length > 0 ||
-                  Boolean(selectedAudio)
+                  Boolean(selectedAudio) ||
+                  Boolean(selectedVideo)
                 }
               >
                 录音
@@ -653,7 +780,8 @@ export default function ChatPage() {
                 disabled={
                   (!composerValue.trim() &&
                     selectedImages.length === 0 &&
-                    !selectedAudio) ||
+                    !selectedAudio &&
+                    !selectedVideo) ||
                   isRecording ||
                   isSending
                 }

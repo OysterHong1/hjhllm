@@ -7,7 +7,7 @@
 ### 普通用户体验
 
 1. 打开链接，输入任意用户名进入聊天
-2. 发送文本消息，选择图片发送图文消息，或录制语音消息
+2. 发送文本消息，选择图片/视频发送多媒体消息，或录制语音消息
 3. 页面会展示 `Thinking...` 动画
 4. 等待"AI"回复（实际上是部署者在后台手动输入）
 
@@ -65,7 +65,7 @@ npm run test:smoke:local
 npm run test:smoke:vercel
 ```
 
-`test:smoke:local` 需要本地 dev server 正在运行；`test:smoke:vercel` 会请求 `https://hjhllm.vercel.app`。Smoke 测试覆盖文本消息、管理员回复、多图附件上传、音频附件上传、消息读取和临时数据清理。
+`test:smoke:local` 需要本地 dev server 正在运行；`test:smoke:vercel` 会请求 `https://hjhllm.vercel.app`。Smoke 测试覆盖文本消息、管理员回复、多图附件上传、音频附件上传、视频附件上传、消息读取和临时数据清理。
 
 ## 项目结构
 
@@ -98,3 +98,4 @@ npm run test:smoke:vercel
 - 线上生产环境默认不暴露 `/admin` 管理 UI
 - 图片附件存储在 Supabase private bucket，通过短期 signed URL 展示
 - 语音消息通过浏览器 `MediaRecorder` 录制，并复用附件上传链路保存
+- 视频消息复用附件上传链路，前端和服务端限制单个视频最大 50MB

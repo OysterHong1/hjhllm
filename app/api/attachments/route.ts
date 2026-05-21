@@ -1,14 +1,9 @@
+import { ATTACHMENT_MAX_BYTES } from "@/lib/contracts";
 import type { AttachmentKind } from "@/lib/contracts";
 import { createUserAttachmentMessage } from "@/lib/server/chat/repository";
 import { fail, ok } from "@/lib/server/http/responses";
 
 export const dynamic = "force-dynamic";
-
-const MAX_UPLOAD_BYTES: Record<AttachmentKind, number> = {
-  image: 10 * 1024 * 1024,
-  audio: 20 * 1024 * 1024,
-  video: 50 * 1024 * 1024,
-};
 
 function getAttachmentKind(mimeType: string): AttachmentKind | null {
   if (mimeType.startsWith("image/")) return "image";
@@ -51,7 +46,7 @@ export async function POST(request: Request) {
       return fail("unsupported_media_type", "Unsupported attachment type", 415);
     }
 
-    const maxSize = MAX_UPLOAD_BYTES[kind];
+    const maxSize = ATTACHMENT_MAX_BYTES[kind];
     if (file.size > maxSize) {
       return fail("payload_too_large", "Attachment is too large", 413);
     }
