@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { BrandMark } from "@/components/chat/BrandMark";
+import { ChatMessage, AdminAvatar } from "@/components/chat/ChatMessage";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Textarea";
-import { MessageAttachments } from "@/components/chat/MessageAttachments";
 import {
   createAttachmentMessage,
   createConversation,
@@ -487,9 +488,9 @@ export default function ChatPage() {
   if (isLoading || !user) return null;
 
   const sidebar = (
-    <aside className="flex flex-col bg-sidebar border-r border-border h-full">
+    <aside className="flex flex-col bg-sidebar/95 border-r border-border h-full">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <h1 className="text-sm font-semibold text-foreground">HJH LLM</h1>
+        <BrandMark />
         <Button
           variant="ghost"
           className="text-xs px-2 py-1"
@@ -509,8 +510,8 @@ export default function ChatPage() {
           <button
             key={conv.id}
             onClick={() => handleSelectConversation(conv.id)}
-            className={`w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-[#ebebeb] ${
-              activeConversationId === conv.id ? "bg-[#e8e8e8]" : ""
+            className={`w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-white/70 ${
+              activeConversationId === conv.id ? "bg-white shadow-sm" : ""
             }`}
           >
             <div className="truncate text-foreground">{conv.title}</div>
@@ -554,7 +555,7 @@ export default function ChatPage() {
       {/* Main chat area */}
       <main className="flex-1 flex flex-col min-w-0 bg-background">
         {/* Top bar (mobile only) */}
-        <div className="md:hidden flex items-center gap-3 px-4 py-3 border-b border-border">
+        <div className="md:hidden flex items-center gap-3 px-4 py-3 border-b border-border bg-background/90">
           <button
             onClick={() => setSidebarOpen(true)}
             className="text-muted hover:text-foreground transition-colors"
@@ -563,7 +564,7 @@ export default function ChatPage() {
               <path d="M3 5h14M3 10h14M3 15h14" />
             </svg>
           </button>
-          <h1 className="text-sm font-semibold text-foreground">HJH LLM</h1>
+          <BrandMark compact />
           {activeConversationId && (
             <span className="text-xs text-muted truncate flex-1">
               {conversations.find((c) => c.id === activeConversationId)?.title}
@@ -581,34 +582,7 @@ export default function ChatPage() {
             )}
 
             {activeMessages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}
-              >
-                <div className="max-w-[85%] md:max-w-[80%]">
-                  <div
-                    className={`rounded-xl px-4 py-2.5 text-sm leading-relaxed ${
-                      msg.sender === "user"
-                        ? "bg-bubble-user text-foreground"
-                        : "text-foreground"
-                    }`}
-                  >
-                    <div className="space-y-2">
-                      <MessageAttachments attachments={msg.attachments} />
-                      {msg.text && (
-                        <p className="whitespace-pre-wrap">{msg.text}</p>
-                      )}
-                    </div>
-                  </div>
-                  <div
-                    className={`text-[10px] text-muted mt-1 ${
-                      msg.sender === "user" ? "text-right" : "text-left"
-                    }`}
-                  >
-                    {formatTime(msg.createdAt)}
-                  </div>
-                </div>
-              </div>
+              <ChatMessage key={msg.id} message={msg} username={user.username} />
             ))}
 
             {isThinking && <ThinkingBubble />}
@@ -618,7 +592,7 @@ export default function ChatPage() {
         </div>
 
         {/* Composer */}
-        <div className="flex-shrink-0 border-t border-border bg-background">
+        <div className="flex-shrink-0 border-t border-border bg-background/95">
           <div className="max-w-3xl mx-auto px-4 md:px-6 py-4">
             {selectedImages.length > 0 && (
               <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -708,7 +682,7 @@ export default function ChatPage() {
                 </div>
               </div>
             )}
-            <div className="flex items-end gap-2 md:gap-3">
+            <div className="flex items-end gap-2 rounded-[30px] border border-border bg-white p-2 shadow-lg shadow-slate-200/60 md:gap-3">
               <input
                 ref={fileInputRef}
                 type="file"
@@ -772,7 +746,7 @@ export default function ChatPage() {
                 value={composerValue}
                 onChange={(e) => setComposerValue(e.target.value)}
                 onKeyDown={handleKeyDown}
-                className="flex-1"
+                className="flex-1 border-transparent bg-transparent shadow-none focus:border-transparent focus:ring-0"
                 rows={2}
               />
               <Button
@@ -819,8 +793,9 @@ function ThinkingBubble() {
   const text = "Thinking" + ".".repeat(dots);
 
   return (
-    <div className="flex justify-start">
-      <div className="text-sm text-muted italic px-4 py-1 select-none min-w-[100px]">
+    <div className="flex justify-start gap-3">
+      <AdminAvatar />
+      <div className="rounded-[22px] border border-[#e6e2da] bg-white px-4 py-3 text-sm italic text-muted shadow-sm select-none min-w-[100px]">
         {text}
       </div>
     </div>

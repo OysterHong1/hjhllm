@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { MessageAttachments } from "@/components/chat/MessageAttachments";
+import { BrandMark } from "@/components/chat/BrandMark";
+import { ChatMessage } from "@/components/chat/ChatMessage";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
@@ -252,9 +253,9 @@ export default function AdminClient() {
   }
 
   const sidebar = (
-    <aside className="flex h-full flex-col border-r border-border bg-sidebar">
+    <aside className="flex h-full flex-col border-r border-border bg-sidebar/95">
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <h1 className="text-sm font-semibold text-foreground">管理后台</h1>
+        <BrandMark label="管理后台" />
         <button
           onClick={handleTokenLogout}
           className="text-xs text-muted transition-colors hover:text-foreground"
@@ -281,8 +282,8 @@ export default function AdminClient() {
           <button
             key={conv.id}
             onClick={() => handleSelectConversation(conv.id)}
-            className={`w-full px-4 py-3 text-left transition-colors hover:bg-[#ebebeb] ${
-              activeConversationId === conv.id ? "bg-[#e8e8e8]" : ""
+            className={`w-full px-4 py-3 text-left transition-colors hover:bg-white/70 ${
+              activeConversationId === conv.id ? "bg-white shadow-sm" : ""
             }`}
           >
             <div className="flex items-center gap-2">
@@ -356,7 +357,7 @@ export default function AdminClient() {
       )}
 
       <main className="flex min-w-0 flex-1 flex-col bg-background">
-        <div className="flex items-center gap-3 border-b border-border px-4 py-3 md:hidden">
+        <div className="flex items-center gap-3 border-b border-border bg-background/90 px-4 py-3 md:hidden">
           <button
             onClick={() => setSidebarOpen(true)}
             className="text-muted transition-colors hover:text-foreground"
@@ -372,7 +373,7 @@ export default function AdminClient() {
               <path d="M3 5h14M3 10h14M3 15h14" />
             </svg>
           </button>
-          <h1 className="text-sm font-semibold text-foreground">管理后台</h1>
+          <BrandMark compact />
           {activeConversation && (
             <span className="flex-1 truncate text-xs text-muted">
               {activeConversation.user?.username}: {activeConversation.title}
@@ -405,34 +406,13 @@ export default function AdminClient() {
         <div className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-3xl space-y-4 px-4 py-6 md:px-6">
             {messages.map((msg) => (
-              <div
+              <ChatMessage
                 key={msg.id}
-                className={`flex ${
-                  msg.sender === "user" ? "justify-end" : "justify-start"
-                }`}
-              >
-                <div className="max-w-[90%] md:max-w-[80%]">
-                  <div
-                    className={`rounded-xl px-4 py-2.5 text-sm leading-relaxed ${
-                      msg.sender === "user"
-                        ? "bg-bubble-user text-foreground"
-                        : "border border-blue-100 bg-blue-50 text-foreground"
-                    }`}
-                  >
-                    <div className="mb-1 text-[10px] text-muted">
-                      {msg.sender === "user" ? "用户" : "管理员"}
-                      {" · "}
-                      {formatTime(msg.createdAt)}
-                    </div>
-                    <div className="space-y-2">
-                      <MessageAttachments attachments={msg.attachments} />
-                      {msg.text && (
-                        <p className="whitespace-pre-wrap">{msg.text}</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
+                message={msg}
+                username={activeConversation?.user?.username ?? "用户"}
+                showSenderLabel
+                roleLabel={msg.sender === "user" ? "用户" : "管理员"}
+              />
             ))}
 
             {activeConversationId && messages.length === 0 && (
@@ -458,13 +438,13 @@ export default function AdminClient() {
         )}
 
         {activeConversationId && (
-          <div className="flex-shrink-0 border-t border-border bg-sidebar">
+          <div className="flex-shrink-0 border-t border-border bg-sidebar/95">
             <div className="mx-auto max-w-3xl px-4 py-4 md:px-6">
               <div className="mb-2 text-xs text-muted">回复消息</div>
-              <div className="flex items-end gap-3">
+              <div className="flex items-end gap-3 rounded-[30px] border border-border bg-white p-2 shadow-lg shadow-slate-200/60">
                 <Textarea
                   placeholder="输入回复..."
-                  className="flex-1"
+                  className="flex-1 border-transparent bg-transparent focus:border-transparent focus:ring-0"
                   rows={2}
                   value={replyContent}
                   onChange={(event) => setReplyContent(event.target.value)}

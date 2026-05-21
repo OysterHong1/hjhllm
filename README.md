@@ -99,3 +99,6 @@ npm run test:smoke:vercel
 - 图片附件存储在 Supabase private bucket，通过短期 signed URL 展示
 - 语音消息通过浏览器 `MediaRecorder` 录制，并复用附件上传链路保存
 - 视频消息复用附件上传链路，前端和服务端限制单个视频最大 50MB
+- UI 参考 `img/` 中的 Claude/Gemini 风格：浅蓝灰背景、白色浮层输入框、圆形头像消息
+- 用户头像临时使用用户名首字符；管理员头像使用 `public/brand/admin-avatar.jpg`
+- 左上角品牌标识使用 `public/brand/oyster-logo.webp`
