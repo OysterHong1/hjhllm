@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { BrandMark } from "@/components/chat/BrandMark";
 import { Button } from "@/components/ui/Button";
+import { ErrorNotice } from "@/components/ui/ErrorNotice";
 import { Input } from "@/components/ui/Input";
 import {
   createUserSession,
@@ -88,9 +89,7 @@ export default function LoginPage() {
           >
             {isSubmitting ? "进入中..." : "进入聊天"}
           </Button>
-          {errorMessage && (
-            <p className="mt-3 text-sm text-accent text-center">{errorMessage}</p>
-          )}
+          <ErrorNotice message={errorMessage} className="mt-3 text-center" />
         </div>
       </div>
     </div>

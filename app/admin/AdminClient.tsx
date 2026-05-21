@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { BrandMark } from "@/components/chat/BrandMark";
 import { ChatMessage } from "@/components/chat/ChatMessage";
 import { Button } from "@/components/ui/Button";
+import { ErrorNotice } from "@/components/ui/ErrorNotice";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import {
@@ -243,9 +244,7 @@ export default function AdminClient() {
             >
               进入
             </Button>
-            {errorMessage && (
-              <p className="text-xs text-accent">{errorMessage}</p>
-            )}
+            <ErrorNotice message={errorMessage} className="text-xs" />
           </div>
         </div>
       </main>
@@ -432,8 +431,8 @@ export default function AdminClient() {
         </div>
 
         {errorMessage && (
-          <div className="border-t border-border px-4 py-2 text-xs text-accent md:px-6">
-            {errorMessage}
+          <div className="border-t border-border px-4 py-2 md:px-6">
+            <ErrorNotice message={errorMessage} className="text-xs" />
           </div>
         )}
 

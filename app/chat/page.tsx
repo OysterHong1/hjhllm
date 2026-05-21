@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { BrandMark } from "@/components/chat/BrandMark";
 import { ChatMessage, AdminAvatar } from "@/components/chat/ChatMessage";
 import { Button } from "@/components/ui/Button";
+import { ErrorNotice } from "@/components/ui/ErrorNotice";
 import { Textarea } from "@/components/ui/Textarea";
 import {
   createAttachmentMessage,
@@ -763,9 +764,7 @@ export default function ChatPage() {
                 {isSending ? "发送中" : "发送"}
               </Button>
             </div>
-            {errorMessage && (
-              <p className="mt-2 text-xs text-accent">{errorMessage}</p>
-            )}
+            <ErrorNotice message={errorMessage} className="mt-3 text-xs" />
           </div>
         </div>
       </main>
