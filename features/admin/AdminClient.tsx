@@ -31,13 +31,62 @@ export default function AdminClient() {
   const [isLoading, setIsLoading] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
   const [isReplying, setIsReplying] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState<
+    NotificationPermission | "unsupported"
+  >("default");
   const [errorMessage, setErrorMessage] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const knownConversationIdsRef = useRef<Set<string>>(new Set());
+  const hasLoadedConversationsRef = useRef(false);
+
+  const notifyNewConversations = useCallback(
+    (nextConversations: AdminConversation[]) => {
+      const nextIds = new Set(
+        nextConversations.map((conversation) => conversation.id)
+      );
+
+      if (!hasLoadedConversationsRef.current) {
+        knownConversationIdsRef.current = nextIds;
+        hasLoadedConversationsRef.current = true;
+        return;
+      }
+
+      const newConversations = nextConversations.filter(
+        (conversation) => !knownConversationIdsRef.current.has(conversation.id)
+      );
+      knownConversationIdsRef.current = nextIds;
+
+      if (
+        newConversations.length === 0 ||
+        typeof window === "undefined" ||
+        !("Notification" in window) ||
+        Notification.permission !== "granted"
+      ) {
+        return;
+      }
+
+      newConversations.forEach((conversation) => {
+        const notification = new Notification("有新的会话", {
+          body: `${conversation.user?.username ?? "未知用户"}：${
+            conversation.title
+          }`,
+          icon: "/brand/oyster-logo.webp",
+          tag: conversation.id,
+        });
+        notification.onclick = () => {
+          window.focus();
+          setActiveConversationId(conversation.id);
+        };
+      });
+    },
+    []
+  );
 
   const refreshConversations = useCallback(
     async (preferredId?: string | null) => {
       const nextConversations = await listAdminConversations();
+      notifyNewConversations(nextConversations);
       setConversations(nextConversations);
 
       const nextActiveId =
@@ -51,7 +100,7 @@ export default function AdminClient() {
         setMessages([]);
       }
     },
-    [activeConversationId]
+    [activeConversationId, notifyNewConversations]
   );
 
   const refreshDetail = useCallback(
@@ -125,6 +174,28 @@ export default function AdminClient() {
     setSidebarOpen(false);
     setErrorMessage("");
     setStatusMessage("");
+  };
+
+  const handleRequestNotificationPermission = async () => {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      setNotificationPermission("unsupported");
+      setStatusMessage("当前浏览器不支持系统通知");
+      return;
+    }
+
+    if (Notification.permission === "granted") {
+      setNotificationPermission("granted");
+      setStatusMessage("系统通知已开启");
+      return;
+    }
+
+    const nextPermission = await Notification.requestPermission();
+    setNotificationPermission(nextPermission);
+    setStatusMessage(
+      nextPermission === "granted"
+        ? "系统通知已开启，有新会话时会提醒"
+        : "系统通知未开启，请在浏览器设置中允许通知"
+    );
   };
 
   const handleReply = async () => {
@@ -213,7 +284,11 @@ export default function AdminClient() {
       conversations={conversations}
       activeConversationId={activeConversationId}
       isLoading={isLoading}
+      notificationPermission={notificationPermission}
       showClearConfirm={showClearConfirm}
+      onRequestNotificationPermission={() =>
+        void handleRequestNotificationPermission()
+      }
       onRefresh={() => void handleRefresh()}
       onSelectConversation={handleSelectConversation}
       onRequestClearData={() => setShowClearConfirm(true)}

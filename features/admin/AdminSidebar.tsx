@@ -7,7 +7,9 @@ type AdminSidebarProps = {
   conversations: AdminConversation[];
   activeConversationId: string | null;
   isLoading: boolean;
+  notificationPermission: NotificationPermission | "unsupported";
   showClearConfirm: boolean;
+  onRequestNotificationPermission: () => void;
   onRefresh: () => void;
   onSelectConversation: (id: string) => void;
   onRequestClearData: () => void;
@@ -19,7 +21,9 @@ export function AdminSidebar({
   conversations,
   activeConversationId,
   isLoading,
+  notificationPermission,
   showClearConfirm,
+  onRequestNotificationPermission,
   onRefresh,
   onSelectConversation,
   onRequestClearData,
@@ -30,12 +34,31 @@ export function AdminSidebar({
     <aside className="flex h-full flex-col border-r border-border bg-sidebar/95">
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <BrandMark label="管理后台" />
-        <button
-          onClick={onRefresh}
-          className="text-xs text-muted transition-colors hover:text-foreground"
-        >
-          刷新
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onRequestNotificationPermission}
+            disabled={
+              notificationPermission === "granted" ||
+              notificationPermission === "denied" ||
+              notificationPermission === "unsupported"
+            }
+            className="text-xs text-muted transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {notificationPermission === "granted"
+              ? "通知已开"
+              : notificationPermission === "denied"
+              ? "通知受限"
+              : notificationPermission === "unsupported"
+              ? "无通知"
+              : "开启通知"}
+          </button>
+          <button
+            onClick={onRefresh}
+            className="text-xs text-muted transition-colors hover:text-foreground"
+          >
+            刷新
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto py-2">
