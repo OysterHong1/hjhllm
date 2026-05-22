@@ -1,0 +1,15 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: hjhllm-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      ATTACHMENT_STORAGE_DIR: /data/attachments
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./data/attachments:/data/attachments

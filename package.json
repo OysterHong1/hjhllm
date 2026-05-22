@@ -3,16 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint",
-    "test:smoke:admin": "node scripts/smoke-admin-api.mjs",
-    "test:smoke:local": "node scripts/smoke-admin-api.mjs",
-    "test:smoke:vercel": "node scripts/smoke-admin-api.mjs https://hjhllm.vercel.app"
+    "dev": "next dev frontend",
+    "build": "next build frontend",
+    "start": "next start frontend",
+    "lint": "cd frontend && eslint",
+    "test:smoke": "node scripts/smoke-api.mjs"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.106.0",
     "next": "16.2.6",
     "react": "19.2.4",
     "react-dom": "19.2.4"

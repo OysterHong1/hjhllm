@@ -23,16 +23,19 @@
 
 ## 技术栈
 
-- **框架**: Next.js 16 (App Router, Turbopack)
-- **语言**: TypeScript
+- **前端**: Next.js 16 (App Router, Turbopack)
+- **后端**: Python FastAPI
+- **语言**: TypeScript + Python
 - **样式**: Tailwind CSS v4
-- **存储**: Supabase Postgres + Storage
-- **部署**: Vercel
+- **存储**: 本地 PostgreSQL + 本地附件文件
+- **部署**: Linux/Docker Compose
 
 ## 本地开发
 
 ```bash
 npm install
+python3 -m venv backend/.venv
+backend/.venv/bin/pip install -r backend/requirements.txt
 npm run dev
 ```
 
@@ -47,61 +50,59 @@ npm run dev
 复制 `.env.example` 为 `.env.local` 并填入：
 
 ```bash
-NEXT_PUBLIC_SUPABASE_URL=...
-SUPABASE_SERVICE_ROLE_KEY=...
+DATABASE_URL=postgres://hjhllm:...@127.0.0.1:5432/hjhllm
+ATTACHMENT_STORAGE_DIR=.data/attachments
+BACKEND_API_BASE_URL=http://127.0.0.1:8000
 ADMIN_API_TOKEN=...
-ADMIN_API_BASE_URL=
 ```
 
-管理后台浏览器端只请求同源 `/api/admin-panel/*`，由服务端代理附带 `ADMIN_API_TOKEN` 请求管理 API。`ADMIN_API_BASE_URL` 留空时代理同源 API；需要把独立管理端指向线上应用时，设为 `https://hjhllm.vercel.app`。
+浏览器端仍只请求同源 `/api/*`。`frontend/app/api/[...path]/route.ts` 作为统一薄代理转发到 Python 后端 `BACKEND_API_BASE_URL`；管理后台浏览器端请求 `/api/admin-panel/*`，由独立 Next 代理附带 `ADMIN_API_TOKEN` 请求后端管理 API。
 
-### Supabase 配置
+### 本地 PostgreSQL 配置
 
-1. 创建 Supabase 项目。
-2. 在 SQL Editor 执行 `supabase/migrations/202605200001_initial_chat_schema.sql`。
-3. 确认表已创建：`users`、`conversations`、`messages`、`attachments`。
-4. 确认 Storage bucket 已创建：`message-attachments`，并保持 private。
-5. 将项目 URL 和 service role key 写入本地 `.env.local` 与 Vercel Production 环境变量。
-
-### Vercel 配置
-
-Production 环境变量至少需要：
+1. 创建 `.env.local`，至少设置 `DATABASE_URL`、`ATTACHMENT_STORAGE_DIR` 和 `ADMIN_API_TOKEN`。
+2. 启动本地 PostgreSQL：
 
 ```bash
-NEXT_PUBLIC_SUPABASE_URL=...
-SUPABASE_SERVICE_ROLE_KEY=...
-ADMIN_API_TOKEN=...
-NEXT_PUBLIC_ENABLE_ADMIN_UI=false
+POSTGRES_PASSWORD=replace-with-password docker compose -f docker-compose.postgres.yml up -d
 ```
 
-部署后检查：
+3. 执行迁移：
 
 ```bash
-curl https://hjhllm.vercel.app/api/health
-curl -I https://hjhllm.vercel.app/admin
+psql "$DATABASE_URL" -f db/migrations/001_initial_chat_schema.sql
 ```
 
-`/api/health` 应返回 Supabase ok；生产 `/admin` 应返回 404。
+4. 确认表已创建：`users`、`conversations`、`messages`、`attachments`。
+
+### Python 后端
+
+本地启动：
+
+```bash
+set -a; source .env.local; set +a
+backend/.venv/bin/uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+```
+
+Docker 启动：
+
+```bash
+docker compose -f docker-compose.backend.yml up -d --build
+```
 
 ### 本地管理端
 
-本地调试本项目数据时直接启动：
+本地调试本项目数据时，先启动 Python 后端，再启动 Next：
 
 ```bash
+set -a; source .env.local; set +a
+backend/.venv/bin/uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
 npm run dev
 ```
 
-如需独立启动管理端并管理线上数据：
-
-```bash
-ADMIN_API_BASE_URL=https://hjhllm.vercel.app npm run dev -- -p 3001
-```
-
-打开 http://localhost:3001/admin。浏览器不会保存或发送管理 token，token 只由服务端代理读取 `ADMIN_API_TOKEN` 后注入到管理 API 请求中。
-
 ### 本地归档
 
-管理端的“本地归档”会由本地 Next 服务端生成 zip，并触发浏览器下载框：
+管理端的“本地归档”会由 Python 后端生成 zip，并通过 Next 代理触发浏览器下载框：
 
 ```text
 <归档时间_用户名_标题_会话ID>.zip
@@ -120,11 +121,10 @@ ADMIN_API_BASE_URL=https://hjhllm.vercel.app npm run dev -- -p 3001
 ```bash
 npm run lint
 npm run build
-npm run test:smoke:local
-npm run test:smoke:vercel
+npm run test:smoke -- http://127.0.0.1:3000
 ```
 
-`test:smoke:local` 需要本地 dev server 正在运行；`test:smoke:vercel` 会请求 `https://hjhllm.vercel.app`。Smoke 测试覆盖文本消息、管理员回复、多图附件上传、音频附件上传、视频附件上传、消息读取和临时数据清理。
+Smoke 测试需要 Python 后端和 Next dev server 都已启动。测试覆盖文本消息、管理员回复、多图附件上传、音频附件上传、视频附件上传、消息读取和临时数据清理。
 
 ## 配额与备份
 
@@ -134,65 +134,57 @@ npm run test:smoke:vercel
 - 音频：20MB
 - 视频：50MB
 
-这些限制在 `lib/contracts/attachments.ts` 中集中定义，并由前端和 `/api/attachments` 共同使用。
+这些限制在前端 `frontend/lib/contracts/attachments.ts` 和后端 `backend/app/infra/storage.py` 中保持一致。
 
-### Supabase Free 注意事项
+### 本地数据注意事项
 
-- Free 项目存在数据库和 Storage 容量限制。
-- 长时间不活跃的项目可能被暂停。
-- 当前 bucket 为 private，附件展示依赖短期 signed URL。
-- service role key 只能放在服务端环境变量中，不能暴露给浏览器。
+- PostgreSQL 数据保存在 Docker volume `hjhllm-postgres-data`。
+- 附件文件保存在 `ATTACHMENT_STORAGE_DIR`，默认是项目内 `.data/attachments`。
+- 附件访问 URL 由应用内 `/api/attachments/files/*` 提供。
+- `DATABASE_URL` 只能放在服务端环境变量中，不能暴露给浏览器。
 
 ### 数据备份
 
-- Postgres 数据：在 Supabase Dashboard 中导出数据库，或使用 `pg_dump`。
-- Storage 附件：定期从 `message-attachments` bucket 下载对象。
-- 建议同时备份数据库行和 Storage 对象；`attachments.storage_path` 是两者关联字段。
+- Postgres 数据：使用 `pg_dump "$DATABASE_URL"`。
+- 附件：定期备份 `ATTACHMENT_STORAGE_DIR`。
+- 建议同时备份数据库行和附件目录；`attachments.storage_path` 是两者关联字段。
 
 ### 已知限制
 
 - 匿名身份只依赖浏览器保存的 `userId`，不是强认证。
 - 管理端使用单个 `ADMIN_API_TOKEN`，不是多管理员账号系统。
 - 多模态附件只做上传、保存、展示，不做 AI 解析、转写或摘要。
-- 当前无实时 WebSocket，用户端通过轮询刷新管理员回复。
-- Supabase Free 配额不足时需要升级计划或迁移到独立 Postgres/Storage。
+- 当前实时链路仍保留轮询；WebSocket 将在 Python 后端稳定后接入。
+- 本地磁盘容量不足时需要扩容云盘或迁移附件目录。
 
 ## 项目结构
 
 ```
-├── app
-│   ├── login/page.tsx      # 登录页
-│   ├── chat/page.tsx       # 用户聊天页路由入口
-│   ├── admin/page.tsx      # 本地管理员后台路由入口
-│   ├── not-found.tsx       # 404 页面
-│   ├── layout.tsx          # 根布局
-│   └── page.tsx            # 根路由 → /chat
-├── components/ui           # UI 组件
-│   ├── Button.tsx
-│   ├── Input.tsx
-│   └── Textarea.tsx
-├── features
-│   ├── chat                # 用户聊天功能模块
-│   └── admin               # 管理后台功能模块
-├── lib
-│   ├── api-client          # 浏览器端 API client
-│   ├── server              # 服务端 Supabase 与 repository
-│   ├── chat.ts             # 聊天逻辑
-│   ├── ids.ts              # ID 生成
-│   └── time.ts             # 时间格式化
+├── frontend
+│   ├── app                 # Next.js App Router 与 BFF 代理
+│   ├── components          # 通用 UI 与消息展示组件
+│   ├── features            # chat / admin 功能模块
+│   ├── lib                 # 前端 API client、契约类型与 Next 代理工具
+│   └── public              # 品牌与头像静态资源
+├── backend                 # FastAPI 后端
+│   ├── api                 # HTTP 路由
+│   ├── config              # 环境配置
+│   ├── infra               # DB / 文件存储
+│   └── services            # 聊天与归档业务
+├── db/migrations           # PostgreSQL schema
 └── docs                    # 项目文档
 ```
 
 ## 设计说明
 
-- 用户端通过 Next.js Route Handler 读写 Supabase
+- 用户端通过 Next.js 代理访问 Python FastAPI，后端读写本地 PostgreSQL
 - 浏览器只保存匿名 `userId`，不保存完整消息数据
-- 管理 API 使用 `Authorization: Bearer ${ADMIN_API_TOKEN}` 鉴权
-- 管理 UI 通过 `/api/admin-panel/*` 服务端代理访问管理 API，避免在浏览器暴露管理 token
+- 管理 API 在 Python 后端使用 `Authorization: Bearer ${ADMIN_API_TOKEN}` 鉴权
+- 管理 UI 通过 `/api/admin-panel/*` Next 代理访问管理 API，避免在浏览器暴露管理 token
 - 线上生产环境默认不暴露 `/admin` 管理 UI
-- 图片附件存储在 Supabase private bucket，通过短期 signed URL 展示
+- 图片、语音和视频附件存储在本地附件目录，通过应用内文件路由展示
 - 语音消息通过浏览器 `MediaRecorder` 录制，并复用附件上传链路保存
 - 视频消息复用附件上传链路，前端和服务端限制单个视频最大 50MB
 - UI 参考 `img/` 中的 Claude/Gemini 风格：浅蓝灰背景、白色浮层输入框、圆形头像消息
-- 用户头像临时使用用户名首字符；管理员头像使用 `public/brand/admin-avatar.jpg`
-- 左上角品牌标识使用 `public/brand/oyster-logo.webp`
+- 用户头像临时使用用户名首字符；管理员头像使用 `frontend/public/brand/admin-avatar.jpg`
+- 左上角品牌标识使用 `frontend/public/brand/oyster-logo.webp`
