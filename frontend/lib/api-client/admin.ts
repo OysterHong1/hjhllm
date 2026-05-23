@@ -1,5 +1,7 @@
 import type {
   AdminConversation,
+  AiReplyConfig,
+  AiReplyConfigInput,
   ApiFailure,
   ApiResult,
   Conversation,
@@ -64,6 +66,39 @@ export async function archiveAdminConversation(
     }
   );
   return data.conversation;
+}
+
+export async function getAiReplyConfig(): Promise<AiReplyConfig> {
+  const data = await adminRequest<{ config: AiReplyConfig }>(
+    "/ai-reply/config"
+  );
+  return data.config;
+}
+
+export async function updateAiReplyConfig(
+  input: AiReplyConfigInput
+): Promise<AiReplyConfig> {
+  const data = await adminRequest<{ config: AiReplyConfig }>(
+    "/ai-reply/config",
+    {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }
+  );
+  return data.config;
+}
+
+export async function setAiReplyEnabled(
+  enabled: boolean
+): Promise<AiReplyConfig> {
+  const data = await adminRequest<{ config: AiReplyConfig }>(
+    "/ai-reply/enabled",
+    {
+      method: "POST",
+      body: JSON.stringify({ enabled }),
+    }
+  );
+  return data.config;
 }
 
 export type LocalConversationArchive = {

@@ -299,6 +299,29 @@ def create_admin_message(conversation_id: str, text: str) -> Optional[dict[str, 
     return to_message(message)
 
 
+def create_assistant_message(conversation_id: str, text: str) -> Optional[dict[str, Any]]:
+    if not get_admin_conversation(conversation_id):
+        return None
+
+    timestamp = now_iso()
+    with connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                insert into messages (id, conversation_id, sender, text, created_at)
+                values (%s, %s, 'assistant', %s, %s)
+                returning id, conversation_id, sender, text, created_at
+                """,
+                (create_id(), conversation_id, text, timestamp),
+            )
+            message = cursor.fetchone()
+            cursor.execute(
+                "update conversations set updated_at = %s where id = %s",
+                (timestamp, conversation_id),
+            )
+    return to_message(message)
+
+
 def archive_admin_conversation(conversation_id: str) -> Optional[dict[str, Any]]:
     conversation = one(
         """

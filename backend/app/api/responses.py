@@ -1,11 +1,18 @@
-from typing import Any
+from typing import Any, Optional, Union
 
+from starlette.background import BackgroundTask, BackgroundTasks
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
 
-def ok(data: Any, status_code: int = 200) -> JSONResponse:
-    return JSONResponse({"ok": True, "data": data}, status_code=status_code)
+def ok(
+    data: Any,
+    status_code: int = 200,
+    background: Optional[Union[BackgroundTask, BackgroundTasks]] = None,
+) -> JSONResponse:
+    return JSONResponse(
+        {"ok": True, "data": data}, status_code=status_code, background=background
+    )
 
 
 def fail(code: str, message: str, status_code: int = 400) -> JSONResponse:

@@ -121,6 +121,19 @@ assert(
 console.log("✓ admin API rejects missing token");
 
 const {
+  data: { config: aiReplyConfig },
+} = await api("/api/admin/ai-reply/config", {
+  headers: adminHeaders(),
+});
+assert(
+  aiReplyConfig?.provider === "deepseek" &&
+    typeof aiReplyConfig.enabled === "boolean" &&
+    typeof aiReplyConfig.apiKeyConfigured === "boolean",
+  "Admin AI reply config endpoint did not return the expected shape"
+);
+console.log("✓ admin AI reply config is readable");
+
+const {
   data: { user },
   response: sessionResponse,
 } = await api("/api/users/session", {
@@ -272,7 +285,10 @@ const adminConversation = conversations.find(
   (item) => item.id === conversation.id
 );
 assert(adminConversation, "Admin conversation list did not include smoke chat");
-assert(adminConversation.needsReply, "Smoke chat should be marked needsReply");
+assert(
+  aiReplyConfig.enabled || adminConversation.needsReply,
+  "Smoke chat should be marked needsReply while AI auto-reply is disabled"
+);
 console.log("✓ admin list includes pending conversation");
 
 const {

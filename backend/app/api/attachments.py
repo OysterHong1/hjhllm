@@ -1,11 +1,12 @@
 from typing import Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from backend.app.api.responses import fail, ok
 from backend.app.infra.db import one
 from backend.app.infra.storage import attachment_file_path, safe_storage_path
+from backend.app.services.ai_reply import maybe_create_ai_reply
 from backend.app.services.chat import create_attachment_message
 
 router = APIRouter()
@@ -13,6 +14,7 @@ router = APIRouter()
 
 @router.post("/api/attachments")
 async def create_message_with_attachments(
+    background_tasks: BackgroundTasks,
     conversationId: str = Form(...),
     userId: str = Form(...),
     text: str = Form(default=""),
@@ -46,7 +48,8 @@ async def create_message_with_attachments(
 
     if not message:
         return fail("not_found", "Conversation not found", 404)
-    return ok({"message": message}, 201)
+    background_tasks.add_task(maybe_create_ai_reply, conversation_id)
+    return ok({"message": message}, 201, background_tasks)
 
 
 @router.get("/api/attachments/files/{storage_path:path}")

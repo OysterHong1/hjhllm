@@ -46,3 +46,7 @@ export async function GET(request: Request, context: AdminPanelProxyContext) {
 export async function POST(request: Request, context: AdminPanelProxyContext) {
   return proxyAdminPanelRequest(request, context);
 }
+
+export async function PUT(request: Request, context: AdminPanelProxyContext) {
+  return proxyAdminPanelRequest(request, context);
+}

@@ -5,17 +5,41 @@ import { BrandMark } from "@/components/chat/BrandMark";
 import { ChatMessage } from "@/components/chat/ChatMessage";
 import { Button } from "@/components/ui/Button";
 import { ErrorNotice } from "@/components/ui/ErrorNotice";
+import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import {
   archiveAdminConversationLocally,
   createAdminMessage,
+  getAiReplyConfig,
   getAdminConversation,
   getAdminErrorMessage,
   listAdminConversations,
   resetDemoData,
+  setAiReplyEnabled,
+  updateAiReplyConfig,
 } from "@/lib/api-client/admin";
-import type { AdminConversation, Message } from "@/lib/contracts";
+import type { AdminConversation, AiReplyConfig, Message } from "@/lib/contracts";
 import { AdminSidebar } from "./AdminSidebar";
+
+type AiReplyDraft = {
+  enabled: boolean;
+  baseUrl: string;
+  model: string;
+  apiKey: string;
+  systemPrompt: string;
+  reasoningEffort: string;
+};
+
+function aiConfigToDraft(config: AiReplyConfig): AiReplyDraft {
+  return {
+    enabled: config.enabled,
+    baseUrl: config.baseUrl,
+    model: config.model,
+    apiKey: "",
+    systemPrompt: config.systemPrompt,
+    reasoningEffort: config.reasoningEffort,
+  };
+}
 
 export default function AdminClient() {
   const [conversations, setConversations] = useState<AdminConversation[]>([]);
@@ -31,6 +55,10 @@ export default function AdminClient() {
   const [isLoading, setIsLoading] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
   const [isReplying, setIsReplying] = useState(false);
+  const [aiConfig, setAiConfig] = useState<AiReplyConfig | null>(null);
+  const [aiDraft, setAiDraft] = useState<AiReplyDraft | null>(null);
+  const [isAiPanelOpen, setIsAiPanelOpen] = useState(false);
+  const [isAiSaving, setIsAiSaving] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState<
     NotificationPermission | "unsupported"
   >("default");
@@ -135,6 +163,12 @@ export default function AdminClient() {
     []
   );
 
+  const loadAiConfig = useCallback(async () => {
+    const config = await getAiReplyConfig();
+    setAiConfig(config);
+    setAiDraft(aiConfigToDraft(config));
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -154,6 +188,25 @@ export default function AdminClient() {
       cancelled = true;
     };
   }, [refreshConversations]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadConfig() {
+      try {
+        const config = await getAiReplyConfig();
+        if (cancelled) return;
+        setAiConfig(config);
+        setAiDraft(aiConfigToDraft(config));
+      } catch (error) {
+        if (!cancelled) setErrorMessage(getAdminErrorMessage(error));
+      }
+    }
+
+    void loadConfig();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!activeConversationId) return;
@@ -301,12 +354,185 @@ export default function AdminClient() {
     }
   };
 
+  const handleToggleAiReply = async () => {
+    if (!aiConfig || isAiSaving) return;
+
+    setIsAiSaving(true);
+    setErrorMessage("");
+    setStatusMessage("");
+    try {
+      const config = await setAiReplyEnabled(!aiConfig.enabled);
+      setAiConfig(config);
+      setAiDraft(aiConfigToDraft(config));
+      setStatusMessage(config.enabled ? "AI 自动回复已开启" : "AI 自动回复已关闭");
+    } catch (error) {
+      setErrorMessage(getAdminErrorMessage(error));
+    } finally {
+      setIsAiSaving(false);
+    }
+  };
+
+  const handleSaveAiConfig = async () => {
+    if (!aiDraft || isAiSaving) return;
+
+    setIsAiSaving(true);
+    setErrorMessage("");
+    setStatusMessage("");
+    try {
+      const apiKey = aiDraft.apiKey.trim();
+      const config = await updateAiReplyConfig({
+        enabled: aiDraft.enabled,
+        baseUrl: aiDraft.baseUrl,
+        model: aiDraft.model,
+        systemPrompt: aiDraft.systemPrompt,
+        reasoningEffort: aiDraft.reasoningEffort,
+        ...(apiKey ? { apiKey } : {}),
+      });
+      setAiConfig(config);
+      setAiDraft(aiConfigToDraft(config));
+      setStatusMessage("AI 回复配置已保存");
+    } catch (error) {
+      setErrorMessage(getAdminErrorMessage(error));
+    } finally {
+      setIsAiSaving(false);
+    }
+  };
+
   const handleReplyKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       void handleReply();
     }
   };
+
+  const aiStatus = aiConfig
+    ? aiConfig.enabled
+      ? "AI 自动回复开启"
+      : "人工回复模式"
+    : "AI 配置加载中";
+
+  const aiPanel = isAiPanelOpen && aiDraft && (
+    <div className="border-b border-border bg-sidebar/80 px-4 py-4 md:px-6">
+      <div className="mx-auto max-w-3xl space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="text-sm font-medium text-foreground">
+              DeepSeek 回复配置
+            </div>
+            <div className="text-xs text-muted">
+              {aiConfig?.apiKeyConfigured ? "API Key 已配置" : "尚未配置 API Key"}
+            </div>
+          </div>
+          <label className="inline-flex items-center gap-2 text-xs text-muted">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-[#111111]"
+              checked={aiDraft.enabled}
+              onChange={(event) =>
+                setAiDraft((current) =>
+                  current
+                    ? { ...current, enabled: event.target.checked }
+                    : current
+                )
+              }
+            />
+            自动回复
+          </label>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <label className="space-y-1 text-xs text-muted">
+            <span>Base URL</span>
+            <Input
+              value={aiDraft.baseUrl}
+              onChange={(event) =>
+                setAiDraft((current) =>
+                  current ? { ...current, baseUrl: event.target.value } : current
+                )
+              }
+            />
+          </label>
+          <label className="space-y-1 text-xs text-muted">
+            <span>模型</span>
+            <Input
+              value={aiDraft.model}
+              onChange={(event) =>
+                setAiDraft((current) =>
+                  current ? { ...current, model: event.target.value } : current
+                )
+              }
+            />
+          </label>
+          <label className="space-y-1 text-xs text-muted">
+            <span>API Key</span>
+            <Input
+              type="password"
+              value={aiDraft.apiKey}
+              placeholder={
+                aiConfig?.apiKeyConfigured ? "留空保持当前密钥" : "输入 DeepSeek API Key"
+              }
+              onChange={(event) =>
+                setAiDraft((current) =>
+                  current ? { ...current, apiKey: event.target.value } : current
+                )
+              }
+            />
+          </label>
+          <label className="space-y-1 text-xs text-muted">
+            <span>推理强度</span>
+            <select
+              className="w-full rounded-full border border-border bg-white px-4 py-2 text-sm text-foreground outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/20"
+              value={aiDraft.reasoningEffort}
+              onChange={(event) =>
+                setAiDraft((current) =>
+                  current
+                    ? { ...current, reasoningEffort: event.target.value }
+                    : current
+                )
+              }
+            >
+              <option value="low">low</option>
+              <option value="medium">medium</option>
+              <option value="high">high</option>
+            </select>
+          </label>
+        </div>
+
+        <label className="block space-y-1 text-xs text-muted">
+          <span>系统提示词</span>
+          <Textarea
+            rows={3}
+            value={aiDraft.systemPrompt}
+            onChange={(event) =>
+              setAiDraft((current) =>
+                current
+                  ? { ...current, systemPrompt: event.target.value }
+                  : current
+              )
+            }
+          />
+        </label>
+
+        <div className="flex flex-wrap gap-2">
+          <Button
+            className="text-xs"
+            onClick={() => void handleSaveAiConfig()}
+            disabled={isAiSaving}
+          >
+            {isAiSaving ? "保存中" : "保存配置"}
+          </Button>
+          <Button
+            variant="secondary"
+            className="text-xs"
+            onClick={() => void loadAiConfig()}
+            disabled={isAiSaving}
+          >
+            重置
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 
   const sidebar = (
     <AdminSidebar
@@ -365,6 +591,12 @@ export default function AdminClient() {
               {activeConversation.user?.username}: {activeConversation.title}
             </span>
           )}
+          <button
+            onClick={() => setIsAiPanelOpen((open) => !open)}
+            className="text-xs text-muted transition-colors hover:text-foreground"
+          >
+            AI
+          </button>
         </div>
 
         <div className="hidden border-b border-border px-6 py-3 md:block">
@@ -377,18 +609,56 @@ export default function AdminClient() {
                 {activeConversation?.title ?? "选择一个会话"}
               </div>
             </div>
-            {activeConversation && (
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <span className="rounded-full border border-border bg-white px-3 py-1 text-xs text-muted">
+                {aiStatus}
+              </span>
               <Button
                 variant="secondary"
                 className="text-xs"
-                onClick={handleArchive}
-                disabled={isArchiving}
+                onClick={() => void handleToggleAiReply()}
+                disabled={!aiConfig || isAiSaving}
               >
-                {isArchiving ? "归档中" : "本地归档"}
+                {aiConfig?.enabled ? "关闭 AI" : "开启 AI"}
               </Button>
-            )}
+              <Button
+                variant="secondary"
+                className="text-xs"
+                onClick={() => setIsAiPanelOpen((open) => !open)}
+              >
+                API 配置
+              </Button>
+              {activeConversation && (
+                <Button
+                  variant="secondary"
+                  className="text-xs"
+                  onClick={handleArchive}
+                  disabled={isArchiving}
+                >
+                  {isArchiving ? "归档中" : "本地归档"}
+                </Button>
+              )}
+            </div>
           </div>
         </div>
+
+        {aiPanel}
+
+        {aiConfig && (
+          <div className="border-b border-border bg-background px-4 py-2 text-xs text-muted md:hidden">
+            <div className="flex items-center justify-between gap-2">
+              <span>{aiStatus}</span>
+              <Button
+                variant="secondary"
+                className="px-3 py-1 text-xs"
+                onClick={() => void handleToggleAiReply()}
+                disabled={isAiSaving}
+              >
+                {aiConfig.enabled ? "关闭" : "开启"}
+              </Button>
+            </div>
+          </div>
+        )}
 
         <div className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-3xl space-y-4 px-4 py-6 md:px-6">
@@ -398,7 +668,13 @@ export default function AdminClient() {
                 message={msg}
                 username={activeConversation?.user?.username ?? "用户"}
                 showSenderLabel
-                roleLabel={msg.sender === "user" ? "用户" : "管理员"}
+                roleLabel={
+                  msg.sender === "user"
+                    ? "用户"
+                    : msg.sender === "assistant"
+                    ? "AI助手"
+                    : "管理员"
+                }
               />
             ))}
 

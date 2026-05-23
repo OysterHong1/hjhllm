@@ -49,6 +49,25 @@ export type MessageAttachment = {
   createdAt: string;
 };
 
+export type AiReplyConfig = {
+  enabled: boolean;
+  provider: "deepseek";
+  baseUrl: string;
+  model: string;
+  apiKeyConfigured: boolean;
+  systemPrompt: string;
+  reasoningEffort: string;
+};
+
+export type AiReplyConfigInput = {
+  enabled?: boolean;
+  baseUrl?: string;
+  model?: string;
+  apiKey?: string;
+  systemPrompt?: string;
+  reasoningEffort?: string;
+};
+
 export type ApiErrorCode =
   | "bad_request"
   | "unauthorized"

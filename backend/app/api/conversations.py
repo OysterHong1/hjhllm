@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, BackgroundTasks, Request
 
 from backend.app.api.responses import fail, ok
 from backend.app.services.chat import (
@@ -8,6 +8,7 @@ from backend.app.services.chat import (
     list_user_conversations,
     verify_conversation_owner,
 )
+from backend.app.services.ai_reply import maybe_create_ai_reply
 
 router = APIRouter()
 
@@ -35,7 +36,9 @@ def list_user_messages(conversation_id: str, userId: str):
 
 
 @router.post("/api/conversations/{conversation_id}/messages")
-async def create_message(conversation_id: str, request: Request):
+async def create_message(
+    conversation_id: str, request: Request, background_tasks: BackgroundTasks
+):
     body = await request.json()
     user_id = str(body.get("userId", "")).strip()
     text = str(body.get("text", "")).strip()
@@ -47,4 +50,5 @@ async def create_message(conversation_id: str, request: Request):
     message = create_user_message(conversation_id, user_id, text)
     if not message:
         return fail("not_found", "Conversation not found", 404)
-    return ok({"message": message}, 201)
+    background_tasks.add_task(maybe_create_ai_reply, conversation_id)
+    return ok({"message": message}, 201, background_tasks)
