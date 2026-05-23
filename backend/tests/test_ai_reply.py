@@ -50,7 +50,7 @@ class AiReplyTest(unittest.TestCase):
     def test_maybe_create_ai_reply_swallows_provider_failure(self):
         with (
             patch(
-                "backend.app.services.ai_reply.get_ai_reply_config",
+                "backend.app.services.ai_reply.runtime.get_ai_reply_config",
                 return_value={
                     "enabled": True,
                     "apiKey": "test-key",
@@ -58,16 +58,16 @@ class AiReplyTest(unittest.TestCase):
                 },
             ),
             patch(
-                "backend.app.services.ai_reply.list_messages_for_conversation",
+                "backend.app.services.ai_reply.runtime.list_messages_for_conversation",
                 return_value=[
                     {"sender": "user", "text": "你好", "attachments": []},
                 ],
             ),
             patch(
-                "backend.app.services.ai_reply.request_deepseek_reply",
+                "backend.app.services.ai_reply.runtime.request_deepseek_reply",
                 side_effect=RuntimeError("provider unavailable"),
             ),
-            patch("backend.app.services.ai_reply.logger.exception"),
+            patch("backend.app.services.ai_reply.runtime.logger.exception"),
         ):
             self.assertIsNone(maybe_create_ai_reply("conversation-id"))
 
