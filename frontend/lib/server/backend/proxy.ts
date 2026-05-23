@@ -19,6 +19,7 @@ function responseHeaders(response: Response): Headers {
     "content-disposition",
     "content-length",
     "content-type",
+    "set-cookie",
     "x-archive-failed-media-count",
     "x-archive-filename",
     "x-archive-media-count",
@@ -47,6 +48,10 @@ export async function proxyBackend(
   const authorization = request.headers.get("authorization");
   if (authorization && !headers.has("authorization")) {
     headers.set("authorization", authorization);
+  }
+  const cookie = request.headers.get("cookie");
+  if (cookie && !headers.has("cookie")) {
+    headers.set("cookie", cookie);
   }
 
   const body =

@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/Input";
 import {
   createUserSession,
   getErrorMessage,
+  restoreCurrentUserSession,
   restoreUserSession,
 } from "@/lib/api-client/client";
 import {
@@ -25,11 +26,12 @@ export default function LoginPage() {
 
   useEffect(() => {
     const userId = getStoredUserId();
-    if (!userId) return;
 
     let cancelled = false;
-    restoreUserSession(userId)
-      .then(() => {
+    const restore = userId ? restoreUserSession(userId) : restoreCurrentUserSession();
+    restore
+      .then((user) => {
+        setStoredUserId(user.id);
         if (!cancelled) router.replace("/chat");
       })
       .catch(() => {

@@ -63,6 +63,7 @@ async function api(path, init = {}) {
   const { response, body } = await request(path, init);
   assert(body?.ok, `${init.method ?? "GET"} ${path} failed: ${textOf(body)}`);
   return {
+    response,
     status: response.status,
     data: body.data,
   };
@@ -121,12 +122,28 @@ console.log("✓ admin API rejects missing token");
 
 const {
   data: { user },
+  response: sessionResponse,
 } = await api("/api/users/session", {
   method: "POST",
   body: JSON.stringify({ username }),
 });
 assert(user?.id, "User session did not return a user id");
 console.log("✓ created temporary user session");
+
+const sessionCookie = sessionResponse.headers.get("set-cookie");
+assert(sessionCookie?.includes("hjhllm_user_id="), "Session cookie was not set");
+const restoredFromCookie = await api("/api/users/session", {
+  method: "POST",
+  headers: {
+    Cookie: sessionCookie,
+  },
+  body: JSON.stringify({}),
+});
+assert(
+  restoredFromCookie.data.user?.id === user.id,
+  "Cookie-only session restore did not return the same user"
+);
+console.log("✓ restored temporary user session from cookie");
 
 const {
   data: { conversation },

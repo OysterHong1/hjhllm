@@ -13,9 +13,14 @@ import {
   getErrorMessage,
   listConversations,
   listMessages,
+  restoreCurrentUserSession,
   restoreUserSession,
 } from "@/lib/api-client/client";
-import { clearStoredUserId, getStoredUserId } from "@/lib/api-client/session";
+import {
+  clearStoredUserId,
+  getStoredUserId,
+  setStoredUserId,
+} from "@/lib/api-client/session";
 import {
   ATTACHMENT_MAX_BYTES,
   formatAttachmentSize,
@@ -57,6 +62,9 @@ export default function ChatClient() {
   const recordingStartedAtRef = useRef(0);
   const recordingTimerRef = useRef<number | null>(null);
   const discardRecordingRef = useRef(false);
+  const autoSendRecordingRef = useRef(false);
+  const recordingStartRequestedRef = useRef(false);
+  const pendingRecordingStopRef = useRef<"finish" | "cancel" | null>(null);
   const isSendingRef = useRef(false);
 
   const loadMessages = useCallback(
@@ -89,18 +97,16 @@ export default function ChatClient() {
 
   useEffect(() => {
     const userId = getStoredUserId();
-    if (!userId) {
-      router.replace("/login");
-      return;
-    }
-
     const storedUserId = userId;
     let cancelled = false;
 
     async function restore() {
       try {
-        const restoredUser = await restoreUserSession(storedUserId);
+        const restoredUser = storedUserId
+          ? await restoreUserSession(storedUserId)
+          : await restoreCurrentUserSession();
         if (cancelled) return;
+        setStoredUserId(restoredUser.id);
         setUser(restoredUser);
         await loadConversations(restoredUser.id);
       } catch (error) {
@@ -157,16 +163,22 @@ export default function ChatClient() {
     };
   }, [activeConversationId, user]);
 
-  const handleSend = async () => {
-    const content = composerValue.trim();
+  const handleSend = async (override?: {
+    audio?: SelectedAudio;
+    text?: string;
+  }) => {
+    const content = override?.text ?? composerValue.trim();
+    const audioToSend = override?.audio ?? selectedAudio;
+    const imagesToSend = override?.audio ? [] : selectedImages;
+    const videoToSend = override?.audio ? null : selectedVideo;
     if (
       (!content &&
-        selectedImages.length === 0 &&
-        !selectedAudio &&
-        !selectedVideo) ||
+        imagesToSend.length === 0 &&
+        !audioToSend &&
+        !videoToSend) ||
       !user ||
       isSendingRef.current ||
-      isRecording
+      (isRecording && !override?.audio)
     ) {
       return;
     }
@@ -185,26 +197,26 @@ export default function ChatClient() {
       }
 
       const message =
-        selectedAudio
+        audioToSend
           ? await createAttachmentMessage({
               conversationId: convId,
               userId: user.id,
-              files: [selectedAudio.file],
+              files: [audioToSend.file],
               text: content,
-              durationMs: selectedAudio.durationMs,
+              durationMs: audioToSend.durationMs,
             })
-          : selectedVideo
+          : videoToSend
           ? await createAttachmentMessage({
               conversationId: convId,
               userId: user.id,
-              files: [selectedVideo.file],
+              files: [videoToSend.file],
               text: content,
             })
-          : selectedImages.length > 0
+          : imagesToSend.length > 0
           ? await createAttachmentMessage({
               conversationId: convId,
               userId: user.id,
-              files: selectedImages.map((image) => image.file),
+              files: imagesToSend.map((image) => image.file),
               text: content,
             })
           : await createMessage(convId, user.id, content);
@@ -215,11 +227,11 @@ export default function ChatClient() {
         return [...messages, message];
       });
       setComposerValue("");
-      selectedImages.forEach((image) => URL.revokeObjectURL(image.previewUrl));
-      setSelectedImages([]);
-      if (selectedAudio) URL.revokeObjectURL(selectedAudio.previewUrl);
+      imagesToSend.forEach((image) => URL.revokeObjectURL(image.previewUrl));
+      if (imagesToSend.length > 0) setSelectedImages([]);
+      if (audioToSend) URL.revokeObjectURL(audioToSend.previewUrl);
       setSelectedAudio(null);
-      if (selectedVideo) URL.revokeObjectURL(selectedVideo.previewUrl);
+      if (videoToSend) URL.revokeObjectURL(videoToSend.previewUrl);
       setSelectedVideo(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
       void loadConversations(user.id, convId).catch((error) => {
@@ -354,7 +366,7 @@ export default function ChatClient() {
     }
   };
 
-  const handleStartRecording = async () => {
+  const handleStartRecording = async (options?: { autoSend?: boolean }) => {
     if (
       isSending ||
       selectedImages.length > 0 ||
@@ -369,6 +381,9 @@ export default function ChatClient() {
     }
 
     try {
+      recordingStartRequestedRef.current = true;
+      pendingRecordingStopRef.current = null;
+      autoSendRecordingRef.current = Boolean(options?.autoSend);
       if (selectedAudio) URL.revokeObjectURL(selectedAudio.previewUrl);
       setSelectedAudio(null);
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -391,10 +406,15 @@ export default function ChatClient() {
       };
 
       recorder.onstop = () => {
+        recordingStartRequestedRef.current = false;
+        pendingRecordingStopRef.current = null;
         clearRecordingTimer();
         stopRecordingTracks();
         setIsRecording(false);
         setRecordingSeconds(0);
+
+        const shouldAutoSend = autoSendRecordingRef.current;
+        autoSendRecordingRef.current = false;
 
         if (discardRecordingRef.current || audioChunksRef.current.length === 0) {
           audioChunksRef.current = [];
@@ -409,11 +429,17 @@ export default function ChatClient() {
         const file = new File([blob], `recording-${Date.now()}.${extension}`, {
           type,
         });
-        setSelectedAudio({
+        const nextAudio = {
           file,
           previewUrl: URL.createObjectURL(blob),
           durationMs,
-        });
+        };
+
+        if (shouldAutoSend) {
+          void handleSend({ audio: nextAudio, text: "" });
+        } else {
+          setSelectedAudio(nextAudio);
+        }
       };
 
       recorder.start();
@@ -424,8 +450,18 @@ export default function ChatClient() {
           Math.max(1, Math.floor((Date.now() - recordingStartedAtRef.current) / 1000))
         );
       }, 500);
+      const pendingStop = pendingRecordingStopRef.current;
+      if (pendingStop && recorder.state === "recording") {
+        pendingRecordingStopRef.current = null;
+        discardRecordingRef.current = pendingStop === "cancel";
+        if (pendingStop === "cancel") autoSendRecordingRef.current = false;
+        recorder.stop();
+      }
       setErrorMessage("");
     } catch {
+      recordingStartRequestedRef.current = false;
+      pendingRecordingStopRef.current = null;
+      autoSendRecordingRef.current = false;
       stopRecordingTracks();
       setIsRecording(false);
       setErrorMessage("无法开始录音，请检查麦克风权限");
@@ -434,12 +470,42 @@ export default function ChatClient() {
 
   const handleFinishRecording = () => {
     if (!mediaRecorderRef.current || !isRecording) return;
+    autoSendRecordingRef.current = false;
     discardRecordingRef.current = false;
     mediaRecorderRef.current.stop();
   };
 
   const handleCancelRecording = () => {
     if (!mediaRecorderRef.current || !isRecording) return;
+    autoSendRecordingRef.current = false;
+    discardRecordingRef.current = true;
+    mediaRecorderRef.current.stop();
+  };
+
+  const handleHoldStartRecording = () => {
+    void handleStartRecording({ autoSend: true });
+  };
+
+  const handleHoldFinishRecording = () => {
+    if (!mediaRecorderRef.current || !isRecording) {
+      if (recordingStartRequestedRef.current) {
+        pendingRecordingStopRef.current = "finish";
+      }
+      return;
+    }
+    autoSendRecordingRef.current = true;
+    discardRecordingRef.current = false;
+    mediaRecorderRef.current.stop();
+  };
+
+  const handleHoldCancelRecording = () => {
+    if (!mediaRecorderRef.current || !isRecording) {
+      if (recordingStartRequestedRef.current) {
+        pendingRecordingStopRef.current = "cancel";
+      }
+      return;
+    }
+    autoSendRecordingRef.current = false;
     discardRecordingRef.current = true;
     mediaRecorderRef.current.stop();
   };
@@ -564,6 +630,9 @@ export default function ChatClient() {
           onStartRecording={() => void handleStartRecording()}
           onFinishRecording={handleFinishRecording}
           onCancelRecording={handleCancelRecording}
+          onHoldStartRecording={handleHoldStartRecording}
+          onHoldFinishRecording={handleHoldFinishRecording}
+          onHoldCancelRecording={handleHoldCancelRecording}
           onRemoveAudio={handleRemoveAudio}
         />
       </main>

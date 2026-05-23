@@ -11,6 +11,7 @@ async function request<T>(
   init?: RequestInit
 ): Promise<T> {
   const response = await fetch(path, {
+    credentials: "same-origin",
     ...init,
     headers: {
       "Content-Type": "application/json",
@@ -38,6 +39,14 @@ export async function restoreUserSession(userId: string): Promise<User> {
   const data = await request<{ user: User }>("/api/users/session", {
     method: "POST",
     body: JSON.stringify({ userId }),
+  });
+  return data.user;
+}
+
+export async function restoreCurrentUserSession(): Promise<User> {
+  const data = await request<{ user: User }>("/api/users/session", {
+    method: "POST",
+    body: JSON.stringify({}),
   });
   return data.user;
 }
@@ -111,6 +120,7 @@ export async function createAttachmentMessage(input: {
 
   const response = await fetch("/api/attachments", {
     method: "POST",
+    credentials: "same-origin",
     body: formData,
   });
 

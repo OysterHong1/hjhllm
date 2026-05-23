@@ -43,3 +43,14 @@ next-env.d.ts
 # local runtime data
 .data/
 backend/.venv/
+
+###文档内容
+docs/
+AGENTS.md
+CLAUDE.md
+
+### 脚本
+scripts/
+
+### 忽略文件
+.gitignore

@@ -7,7 +7,8 @@
     "build": "next build frontend",
     "start": "next start frontend",
     "lint": "cd frontend && eslint",
-    "test:smoke": "node scripts/smoke-api.mjs"
+    "test:smoke": "node scripts/smoke-api.mjs",
+    "deploy:prod": "scripts/deploy-release.sh"
   },
   "dependencies": {
     "next": "16.2.6",
