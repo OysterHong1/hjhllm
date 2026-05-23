@@ -51,6 +51,12 @@ export async function restoreCurrentUserSession(): Promise<User> {
   return data.user;
 }
 
+export async function logoutUserSession(): Promise<void> {
+  await request<{ deleted: boolean }>("/api/users/session", {
+    method: "DELETE",
+  });
+}
+
 export async function listConversations(
   userId: string
 ): Promise<Conversation[]> {

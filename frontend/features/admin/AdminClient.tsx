@@ -610,11 +610,11 @@ export default function AdminClient() {
 
       {sidebarOpen && (
         <div className="fixed inset-0 z-50 flex md:hidden">
+          <div className="h-full w-[280px] shadow-xl">{sidebar}</div>
           <div
             className="flex-1 bg-black/20"
             onClick={() => setSidebarOpen(false)}
           />
-          <div className="h-full w-[280px] shadow-xl">{sidebar}</div>
         </div>
       )}
 

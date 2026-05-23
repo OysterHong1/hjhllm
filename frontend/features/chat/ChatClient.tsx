@@ -13,6 +13,7 @@ import {
   getErrorMessage,
   listConversations,
   listMessages,
+  logoutUserSession,
   restoreCurrentUserSession,
   restoreUserSession,
 } from "@/lib/api-client/client";
@@ -247,7 +248,12 @@ export default function ChatClient() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await logoutUserSession();
+    } catch {
+      // ignore network errors, still clear local state
+    }
     clearStoredUserId();
     router.replace("/login");
   };
@@ -357,11 +363,11 @@ export default function ChatClient() {
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div className="fixed inset-0 z-50 flex md:hidden">
+          <div className="h-full w-[280px] shadow-xl">{sidebar}</div>
           <div
             className="flex-1 bg-black/20"
             onClick={() => setSidebarOpen(false)}
           />
-          <div className="h-full w-[280px] shadow-xl">{sidebar}</div>
         </div>
       )}
 

@@ -45,3 +45,15 @@ async def users_session(request: Request):
 
     user = create_user_session(username)
     return with_session_cookie(ok({"user": user}, 201), user["id"])
+
+
+@router.delete("/api/users/session")
+async def delete_user_session():
+    response: JSONResponse = ok({"deleted": True})
+    response.delete_cookie(
+        key=SESSION_COOKIE_NAME,
+        path="/",
+        samesite="lax",
+        httponly=True,
+    )
+    return response
