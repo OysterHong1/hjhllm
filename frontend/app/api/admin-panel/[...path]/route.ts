@@ -12,6 +12,7 @@ type AdminPanelProxyContext = {
 function isAdminPanelEnabled(): boolean {
   return (
     process.env.NODE_ENV !== "production" ||
+    process.env.ENABLE_ADMIN_UI === "true" ||
     process.env.NEXT_PUBLIC_ENABLE_ADMIN_UI === "true"
   );
 }

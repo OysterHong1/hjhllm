@@ -54,6 +54,7 @@ DATABASE_URL=postgres://hjhllm:...@127.0.0.1:5432/hjhllm
 ATTACHMENT_STORAGE_DIR=.data/attachments
 BACKEND_API_BASE_URL=http://127.0.0.1:8000
 ADMIN_API_TOKEN=...
+ENABLE_ADMIN_UI=false
 ```
 
 浏览器端仍只请求同源 `/api/*`。`frontend/app/api/[...path]/route.ts` 作为统一薄代理转发到 Python 后端 `BACKEND_API_BASE_URL`；管理后台浏览器端请求 `/api/admin-panel/*`，由独立 Next 代理附带 `ADMIN_API_TOKEN` 请求后端管理 API。
@@ -143,6 +144,10 @@ Smoke 测试需要 Python 后端和 Next dev server 都已启动。测试覆盖�
 - 附件访问 URL 由应用内 `/api/attachments/files/*` 提供。
 - `DATABASE_URL` 只能放在服务端环境变量中，不能暴露给浏览器。
 
+### 生产部署
+
+Ubuntu + Docker Compose 部署流程见 [docs/deployment.md](docs/deployment.md)。生产环境使用仓库根目录 `docker-compose.yml` 同时编排 PostgreSQL、FastAPI 后端和 Next.js standalone 前端。
+
 ### 数据备份
 
 - Postgres 数据：使用 `pg_dump "$DATABASE_URL"`。
@@ -181,7 +186,7 @@ Smoke 测试需要 Python 后端和 Next dev server 都已启动。测试覆盖�
 - 浏览器只保存匿名 `userId`，不保存完整消息数据
 - 管理 API 在 Python 后端使用 `Authorization: Bearer ${ADMIN_API_TOKEN}` 鉴权
 - 管理 UI 通过 `/api/admin-panel/*` Next 代理访问管理 API，避免在浏览器暴露管理 token
-- 线上生产环境默认不暴露 `/admin` 管理 UI
+- 线上生产环境只有设置 `ENABLE_ADMIN_UI=true` 时才暴露 `/admin` 管理 UI
 - 图片、语音和视频附件存储在本地附件目录，通过应用内文件路由展示
 - 语音消息通过浏览器 `MediaRecorder` 录制，并复用附件上传链路保存
 - 视频消息复用附件上传链路，前端和服务端限制单个视频最大 50MB

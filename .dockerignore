@@ -1,0 +1,15 @@
+.git
+.next
+.vercel
+.data
+.claude
+node_modules
+backend/.venv
+frontend/.next
+frontend/node_modules
+*.log
+._*
+.env
+.env.*
+!.env.example
+tsconfig.tsbuildinfo
