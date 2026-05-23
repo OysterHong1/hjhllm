@@ -57,6 +57,8 @@ export type AiReplyConfig = {
   apiKeyConfigured: boolean;
   systemPrompt: string;
   reasoningEffort: string;
+  dailyTokenLimit: number;
+  todayUsage: AiReplyUsage;
 };
 
 export type AiReplyConfigInput = {
@@ -66,6 +68,19 @@ export type AiReplyConfigInput = {
   apiKey?: string;
   systemPrompt?: string;
   reasoningEffort?: string;
+  dailyTokenLimit?: number;
+};
+
+export type AiReplyUsage = {
+  usageDay: string;
+  timezone: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  requestCount: number;
+  activeReservedTokens: number;
+  remainingTokens: number | null;
+  limitReached: boolean;
 };
 
 export type ApiErrorCode =

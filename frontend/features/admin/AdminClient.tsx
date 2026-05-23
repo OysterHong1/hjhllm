@@ -28,6 +28,7 @@ type AiReplyDraft = {
   apiKey: string;
   systemPrompt: string;
   reasoningEffort: string;
+  dailyTokenLimit: string;
 };
 
 function aiConfigToDraft(config: AiReplyConfig): AiReplyDraft {
@@ -38,6 +39,8 @@ function aiConfigToDraft(config: AiReplyConfig): AiReplyDraft {
     apiKey: "",
     systemPrompt: config.systemPrompt,
     reasoningEffort: config.reasoningEffort,
+    dailyTokenLimit:
+      config.dailyTokenLimit > 0 ? String(config.dailyTokenLimit) : "",
   };
 }
 
@@ -386,6 +389,9 @@ export default function AdminClient() {
         model: aiDraft.model,
         systemPrompt: aiDraft.systemPrompt,
         reasoningEffort: aiDraft.reasoningEffort,
+        dailyTokenLimit: aiDraft.dailyTokenLimit.trim()
+          ? Number(aiDraft.dailyTokenLimit)
+          : 0,
         ...(apiKey ? { apiKey } : {}),
       });
       setAiConfig(config);
@@ -479,6 +485,22 @@ export default function AdminClient() {
             />
           </label>
           <label className="space-y-1 text-xs text-muted">
+            <span>每日总 token 上限</span>
+            <Input
+              type="number"
+              min={0}
+              value={aiDraft.dailyTokenLimit}
+              placeholder="0 表示不限制"
+              onChange={(event) =>
+                setAiDraft((current) =>
+                  current
+                    ? { ...current, dailyTokenLimit: event.target.value }
+                    : current
+                )
+              }
+            />
+          </label>
+          <label className="space-y-1 text-xs text-muted">
             <span>推理强度</span>
             <select
               className="w-full rounded-full border border-border bg-white px-4 py-2 text-sm text-foreground outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/20"
@@ -512,6 +534,34 @@ export default function AdminClient() {
             }
           />
         </label>
+
+        <div className="rounded-3xl border border-border bg-white/80 px-4 py-3 text-xs text-muted">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span>
+              今日用量 {aiConfig?.todayUsage.usageDay} ({aiConfig?.todayUsage.timezone})
+            </span>
+            <span
+              className={
+                aiConfig?.todayUsage.limitReached ? "text-[#b45309]" : undefined
+              }
+            >
+              {aiConfig?.todayUsage.limitReached ? "今日额度已触顶" : "额度可用"}
+            </span>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+            <span>prompt: {aiConfig?.todayUsage.promptTokens ?? 0}</span>
+            <span>completion: {aiConfig?.todayUsage.completionTokens ?? 0}</span>
+            <span>total: {aiConfig?.todayUsage.totalTokens ?? 0}</span>
+            <span>请求数: {aiConfig?.todayUsage.requestCount ?? 0}</span>
+            <span>预留中: {aiConfig?.todayUsage.activeReservedTokens ?? 0}</span>
+            <span>
+              剩余:
+              {aiConfig?.todayUsage.remainingTokens == null
+                ? " 不限制"
+                : ` ${aiConfig.todayUsage.remainingTokens}`}
+            </span>
+          </div>
+        </div>
 
         <div className="flex flex-wrap gap-2">
           <Button

@@ -59,6 +59,8 @@ ENABLE_ADMIN_UI=false
 
 浏览器端仍只请求同源 `/api/*`。`frontend/app/api/[...path]/route.ts` 作为统一薄代理转发到 Python 后端 `BACKEND_API_BASE_URL`；管理后台浏览器端请求 `/api/admin-panel/*`，由独立 Next 代理附带 `ADMIN_API_TOKEN` 请求后端管理 API。
 
+AI 自动回复的“每日 token 总量上限”保存在服务端配置表中，由 Python 后端在出站调用前后强制检查与记账；每日归零时间默认按 `AI_REPLY_TOKEN_USAGE_TIMEZONE`（默认 `Asia/Shanghai`）计算。
+
 ### 本地 PostgreSQL 配置
 
 1. 创建 `.env.local`，至少设置 `DATABASE_URL`、`ATTACHMENT_STORAGE_DIR` 和 `ADMIN_API_TOKEN`。
@@ -161,6 +163,7 @@ Ubuntu + Docker Compose 部署流程见 [docs/deployment.md](docs/deployment.md)
 - 多模态附件只做上传、保存、展示，不做 AI 解析、转写或摘要。
 - 当前实时链路仍保留轮询；WebSocket 将在 Python 后端稳定后接入。
 - 本地磁盘容量不足时需要扩容云盘或迁移附件目录。
+- 如果启用了 AI 自动回复日限额，管理后台会展示今日 token 用量、剩余额度和正在预留中的 token。
 
 ## 项目结构
 

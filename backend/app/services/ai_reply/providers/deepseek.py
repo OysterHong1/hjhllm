@@ -15,7 +15,29 @@ def parse_deepseek_response(data: dict[str, Any]) -> str:
     return content.strip()
 
 
-def request_deepseek_reply(config: dict[str, Any], messages: list[dict[str, str]]) -> str:
+def parse_deepseek_usage(data: dict[str, Any]) -> dict[str, int]:
+    usage = data.get("usage")
+    if not isinstance(usage, dict):
+        raise ValueError("DeepSeek response did not include usage")
+
+    prompt_tokens = int(usage.get("prompt_tokens", 0) or 0)
+    completion_tokens = int(usage.get("completion_tokens", 0) or 0)
+    total_tokens = int(
+        usage.get("total_tokens", prompt_tokens + completion_tokens)
+        or prompt_tokens + completion_tokens
+    )
+    return {
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": total_tokens,
+    }
+
+
+def request_deepseek_reply(
+    config: dict[str, Any],
+    messages: list[dict[str, str]],
+    max_completion_tokens: int | None = None,
+) -> dict[str, Any]:
     base_url = str(config["baseUrl"]).rstrip("/")
     url = f"{base_url}/chat/completions"
     body = {
@@ -25,6 +47,8 @@ def request_deepseek_reply(config: dict[str, Any], messages: list[dict[str, str]
         "reasoning_effort": config["reasoningEffort"],
         "thinking": {"type": "enabled"},
     }
+    if max_completion_tokens is not None:
+        body["max_tokens"] = max_completion_tokens
     request = urllib.request.Request(
         url,
         data=json.dumps(body).encode("utf-8"),
@@ -40,4 +64,7 @@ def request_deepseek_reply(config: dict[str, Any], messages: list[dict[str, str]
     except urllib.error.HTTPError as error:
         detail = error.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"DeepSeek API returned {error.code}: {detail}") from error
-    return parse_deepseek_response(data)
+    return {
+        "content": parse_deepseek_response(data),
+        "usage": parse_deepseek_usage(data),
+    }

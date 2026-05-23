@@ -40,6 +40,8 @@ async def admin_update_ai_reply_config(request: Request):
                 "bad_request",
                 "DeepSeek API key is required when AI auto-reply is enabled",
             )
+        if str(error) == "invalid_daily_token_limit":
+            return fail("bad_request", "Daily token limit must be a non-negative integer")
         raise
     return ok({"config": config})
 

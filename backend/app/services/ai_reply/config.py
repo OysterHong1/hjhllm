@@ -6,11 +6,13 @@ from backend.app.services.formatting import now_iso
 
 from .constants import (
     DEFAULT_BASE_URL,
+    DEFAULT_DAILY_TOKEN_LIMIT,
     DEFAULT_MODEL,
     DEFAULT_REASONING_EFFORT,
     DEFAULT_SYSTEM_PROMPT,
     SETTING_KEYS,
 )
+from .usage import get_today_token_usage_snapshot
 
 
 def ensure_settings_table() -> None:
@@ -52,6 +54,17 @@ def bool_input(value: Any, default: bool = False) -> bool:
     return bool(value)
 
 
+def int_input(value: Any, default: int = 0) -> int:
+    if value is None:
+        return default
+    if isinstance(value, str) and not value.strip():
+        return default
+    parsed = int(str(value).strip())
+    if parsed < 0:
+        raise ValueError("invalid_non_negative_int")
+    return parsed
+
+
 def _upsert_settings(values: dict[str, str]) -> None:
     ensure_settings_table()
     timestamp = now_iso()
@@ -72,6 +85,9 @@ def _upsert_settings(values: dict[str, str]) -> None:
 def get_ai_reply_config(include_secret: bool = False) -> dict[str, Any]:
     values = _setting_rows()
     api_key = values.get(SETTING_KEYS["api_key"], "") or get_settings().deepseek_api_key
+    daily_token_limit = int_input(
+        values.get(SETTING_KEYS["daily_token_limit"]), DEFAULT_DAILY_TOKEN_LIMIT
+    )
     config = {
         "enabled": _bool_value(values.get(SETTING_KEYS["enabled"])),
         "provider": values.get(SETTING_KEYS["provider"], "deepseek"),
@@ -82,6 +98,8 @@ def get_ai_reply_config(include_secret: bool = False) -> dict[str, Any]:
         "reasoningEffort": values.get(
             SETTING_KEYS["reasoning_effort"], DEFAULT_REASONING_EFFORT
         ),
+        "dailyTokenLimit": daily_token_limit,
+        "todayUsage": get_today_token_usage_snapshot(daily_token_limit),
     }
     if include_secret:
         config["apiKey"] = api_key
@@ -92,6 +110,14 @@ def update_ai_reply_config(data: dict[str, Any]) -> dict[str, Any]:
     current = get_ai_reply_config(include_secret=True)
     next_enabled = bool_input(data.get("enabled"), current["enabled"])
     next_api_key = str(data.get("apiKey", "")).strip() or current.get("apiKey", "")
+    try:
+        next_daily_token_limit = int_input(
+            data.get("dailyTokenLimit"), current["dailyTokenLimit"]
+        )
+    except ValueError as error:
+        if str(error) == "invalid_non_negative_int":
+            raise ValueError("invalid_daily_token_limit") from error
+        raise
 
     if next_enabled and not next_api_key:
         raise ValueError("missing_api_key")
@@ -111,6 +137,7 @@ def update_ai_reply_config(data: dict[str, Any]) -> dict[str, Any]:
             data.get("reasoningEffort", current["reasoningEffort"])
         ).strip()
         or DEFAULT_REASONING_EFFORT,
+        SETTING_KEYS["daily_token_limit"]: str(next_daily_token_limit),
     }
     if "apiKey" in data and str(data.get("apiKey", "")).strip():
         updates[SETTING_KEYS["api_key"]] = str(data["apiKey"]).strip()
