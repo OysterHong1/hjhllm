@@ -2,30 +2,24 @@
 
 import Image from "next/image";
 import {
-  useRef,
   type ChangeEvent,
   type KeyboardEvent,
-  type PointerEvent,
   type RefObject,
 } from "react";
 import { Button } from "@/components/ui/Button";
 import { ErrorNotice } from "@/components/ui/ErrorNotice";
 import { IconButton } from "@/components/ui/IconButton";
 import { Textarea } from "@/components/ui/Textarea";
-import { MicrophoneIcon, PlusIcon } from "@/components/ui/icons";
+import { PlusIcon } from "@/components/ui/icons";
 import { formatAttachmentSize } from "@/lib/contracts";
-import type { SelectedAudio, SelectedImage, SelectedVideo } from "./types";
-import { formatAudioDuration } from "./utils";
+import type { SelectedImage, SelectedVideo } from "./types";
 
 type ChatComposerProps = {
   value: string;
   errorMessage: string;
   selectedImages: SelectedImage[];
-  selectedAudio: SelectedAudio | null;
   selectedVideo: SelectedVideo | null;
-  isRecording: boolean;
   isSending: boolean;
-  recordingSeconds: number;
   fileInputRef: RefObject<HTMLInputElement | null>;
   onChangeValue: (value: string) => void;
   onSend: () => void;
@@ -33,24 +27,14 @@ type ChatComposerProps = {
   onImageSelect: (event: ChangeEvent<HTMLInputElement>) => void;
   onRemoveImage: (index: number) => void;
   onRemoveVideo: () => void;
-  onStartRecording: () => void;
-  onFinishRecording: () => void;
-  onCancelRecording: () => void;
-  onHoldStartRecording: () => void;
-  onHoldFinishRecording: () => void;
-  onHoldCancelRecording: () => void;
-  onRemoveAudio: () => void;
 };
 
 export function ChatComposer({
   value,
   errorMessage,
   selectedImages,
-  selectedAudio,
   selectedVideo,
-  isRecording,
   isSending,
-  recordingSeconds,
   fileInputRef,
   onChangeValue,
   onSend,
@@ -58,70 +42,11 @@ export function ChatComposer({
   onImageSelect,
   onRemoveImage,
   onRemoveVideo,
-  onStartRecording,
-  onFinishRecording,
-  onCancelRecording,
-  onHoldStartRecording,
-  onHoldFinishRecording,
-  onHoldCancelRecording,
-  onRemoveAudio,
 }: ChatComposerProps) {
-  const holdTimerRef = useRef<number | null>(null);
-  const isHoldRecordingRef = useRef(false);
-  const ignoreNextClickRef = useRef(false);
   const hasPendingContent =
     Boolean(value.trim()) ||
     selectedImages.length > 0 ||
-    Boolean(selectedAudio) ||
     Boolean(selectedVideo);
-  const voiceDisabled =
-    isSending ||
-    isRecording ||
-    Boolean(value.trim()) ||
-    selectedImages.length > 0 ||
-    Boolean(selectedAudio) ||
-    Boolean(selectedVideo);
-
-  const clearHoldTimer = () => {
-    if (holdTimerRef.current) {
-      window.clearTimeout(holdTimerRef.current);
-      holdTimerRef.current = null;
-    }
-  };
-
-  const handleVoicePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
-    if (voiceDisabled) return;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    clearHoldTimer();
-    isHoldRecordingRef.current = false;
-    holdTimerRef.current = window.setTimeout(() => {
-      isHoldRecordingRef.current = true;
-      ignoreNextClickRef.current = true;
-      onHoldStartRecording();
-    }, 180);
-  };
-
-  const handleVoicePointerUp = () => {
-    clearHoldTimer();
-    if (!isHoldRecordingRef.current) return;
-    isHoldRecordingRef.current = false;
-    onHoldFinishRecording();
-  };
-
-  const handleVoicePointerCancel = () => {
-    clearHoldTimer();
-    if (!isHoldRecordingRef.current) return;
-    isHoldRecordingRef.current = false;
-    onHoldCancelRecording();
-  };
-
-  const handleVoiceClick = () => {
-    if (ignoreNextClickRef.current) {
-      ignoreNextClickRef.current = false;
-      return;
-    }
-    onStartRecording();
-  };
 
   return (
     <div className="flex-shrink-0 bg-background/95 px-3 pb-4 pt-2">
@@ -154,24 +79,6 @@ export function ChatComposer({
           </div>
         )}
 
-        {selectedAudio && (
-          <div className="mb-3 rounded-lg border border-border bg-bubble-admin p-3 shadow-sm">
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <span className="text-xs text-muted">
-                语音 {formatAudioDuration(selectedAudio.durationMs)}
-              </span>
-              <button
-                type="button"
-                onClick={onRemoveAudio}
-                className="text-xs text-muted transition-colors hover:text-foreground"
-              >
-                移除
-              </button>
-            </div>
-            <audio controls src={selectedAudio.previewUrl} className="h-9 w-full" />
-          </div>
-        )}
-
         {selectedVideo && (
           <div className="mb-3 rounded-lg border border-border bg-bubble-admin p-3 shadow-sm">
             <div className="mb-2 flex items-center justify-between gap-3">
@@ -194,44 +101,8 @@ export function ChatComposer({
           </div>
         )}
 
-        {isRecording && (
-          <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-accent/30 bg-[#eef6ff] px-3 py-2 shadow-sm">
-            <div className="flex min-w-0 items-center gap-3">
-              <span className="relative flex h-3 w-3 flex-shrink-0">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-30" />
-                <span className="relative inline-flex h-3 w-3 rounded-full bg-accent" />
-              </span>
-              <span className="text-xs font-medium text-accent">
-                录音中 {formatAudioDuration(recordingSeconds * 1000)}
-              </span>
-              <span className="hidden items-end gap-0.5 sm:flex" aria-hidden="true">
-                <span className="voice-bar h-4 w-1 rounded-full bg-accent/70" />
-                <span className="voice-bar h-5 w-1 rounded-full bg-accent/70" />
-                <span className="voice-bar h-3 w-1 rounded-full bg-accent/70" />
-                <span className="voice-bar h-6 w-1 rounded-full bg-accent/70" />
-              </span>
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant="secondary"
-                className="px-3 py-1 text-xs"
-                onClick={onCancelRecording}
-              >
-                取消
-              </Button>
-              <Button className="px-3 py-1 text-xs" onClick={onFinishRecording}>
-                完成
-              </Button>
-            </div>
-          </div>
-        )}
-
         <div
-          className={`flex min-h-[64px] items-center gap-2 rounded-[32px] border bg-white px-3 py-2 shadow-[0_18px_40px_rgba(16,24,40,0.10)] transition-all duration-200 md:min-h-[70px] md:gap-3 md:px-4 ${
-            isRecording
-              ? "border-accent/40 ring-4 ring-accent/10"
-              : "border-[#e8e8e3]"
-          }`}
+          className="flex min-h-[64px] items-center gap-2 rounded-[32px] border border-[#e8e8e3] bg-white px-3 py-2 shadow-[0_18px_40px_rgba(16,24,40,0.10)] transition-all duration-200 md:min-h-[70px] md:gap-3 md:px-4"
         >
           <input
             ref={fileInputRef}
@@ -251,32 +122,19 @@ export function ChatComposer({
           />
           <div className="flex flex-shrink-0 items-center gap-1">
             <IconButton
-              icon={<MicrophoneIcon />}
-              label="按住说话"
-              onPointerDown={handleVoicePointerDown}
-              onPointerUp={handleVoicePointerUp}
-              onPointerCancel={handleVoicePointerCancel}
-              onLostPointerCapture={handleVoicePointerCancel}
-              onClick={handleVoiceClick}
-              disabled={voiceDisabled}
-              className={isRecording ? "bg-[#e8f1ff] text-accent" : ""}
-            />
-            <IconButton
               icon={<PlusIcon />}
               label="更多附件"
               onClick={() => fileInputRef.current?.click()}
               disabled={
                 isSending ||
-                isRecording ||
                 selectedImages.length >= 4 ||
-                Boolean(selectedAudio) ||
                 Boolean(selectedVideo)
               }
             />
             {hasPendingContent && (
               <Button
                 onClick={onSend}
-                disabled={isRecording || isSending}
+                disabled={isSending}
                 className="ml-1 h-10 px-4"
               >
                 {isSending ? "发送中" : "发送"}
