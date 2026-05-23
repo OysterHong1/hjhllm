@@ -30,7 +30,7 @@ export function MessageAttachments({ attachments }: MessageAttachmentsProps) {
     <div className="space-y-2">
       {imageAttachments.length > 0 && (
         <div
-          className={`grid gap-2 ${
+          className={`grid w-[min(68vw,420px)] max-w-full gap-2 ${
             imageAttachments.length === 1 ? "grid-cols-1" : "grid-cols-2"
           }`}
         >
@@ -40,7 +40,7 @@ export function MessageAttachments({ attachments }: MessageAttachmentsProps) {
               href={attachment.url}
               target="_blank"
               rel="noreferrer"
-              className="relative block min-h-52 overflow-hidden rounded-xl border border-border bg-white"
+              className="relative block aspect-[4/3] min-h-32 overflow-hidden rounded-xl border border-border bg-white"
             >
               <Image
                 src={attachment.url}

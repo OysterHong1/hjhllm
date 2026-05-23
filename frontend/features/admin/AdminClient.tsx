@@ -39,6 +39,13 @@ export default function AdminClient() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const knownConversationIdsRef = useRef<Set<string>>(new Set());
   const hasLoadedConversationsRef = useRef(false);
+  const activeConversationIdRef = useRef<string | null>(null);
+  const detailRequestIdRef = useRef(0);
+
+  const setActiveConversationIdSafe = useCallback((id: string | null) => {
+    activeConversationIdRef.current = id;
+    setActiveConversationId(id);
+  }, []);
 
   const notifyNewConversations = useCallback(
     (nextConversations: AdminConversation[]) => {
@@ -76,11 +83,11 @@ export default function AdminClient() {
         });
         notification.onclick = () => {
           window.focus();
-          setActiveConversationId(conversation.id);
+          setActiveConversationIdSafe(conversation.id);
         };
       });
     },
-    []
+    [setActiveConversationIdSafe]
   );
 
   const refreshConversations = useCallback(
@@ -89,23 +96,39 @@ export default function AdminClient() {
       notifyNewConversations(nextConversations);
       setConversations(nextConversations);
 
+      const requestedActiveId =
+        preferredId !== undefined
+          ? preferredId
+          : activeConversationIdRef.current;
       const nextActiveId =
-        preferredId ??
-        activeConversationId ??
-        nextConversations[0]?.id ??
-        null;
-      setActiveConversationId(nextActiveId);
+        requestedActiveId &&
+        nextConversations.some(
+          (conversation) => conversation.id === requestedActiveId
+        )
+          ? requestedActiveId
+          : nextConversations[0]?.id ?? null;
+
+      if (activeConversationIdRef.current !== nextActiveId) {
+        setActiveConversationIdSafe(nextActiveId);
+      }
       if (!nextActiveId) {
         setActiveConversation(null);
         setMessages([]);
       }
     },
-    [activeConversationId, notifyNewConversations]
+    [notifyNewConversations, setActiveConversationIdSafe]
   );
 
   const refreshDetail = useCallback(
     async (conversationId: string) => {
+      const requestId = ++detailRequestIdRef.current;
       const detail = await getAdminConversation(conversationId);
+      if (
+        requestId !== detailRequestIdRef.current ||
+        activeConversationIdRef.current !== conversationId
+      ) {
+        return;
+      }
       setActiveConversation(detail.conversation);
       setMessages(detail.messages);
     },
@@ -153,23 +176,29 @@ export default function AdminClient() {
 
   useEffect(() => {
     const interval = window.setInterval(async () => {
+      const currentConversationId = activeConversationIdRef.current;
       try {
-        await refreshConversations(activeConversationId);
-        if (activeConversationId) await refreshDetail(activeConversationId);
+        await refreshConversations(currentConversationId);
+        if (
+          currentConversationId &&
+          activeConversationIdRef.current === currentConversationId
+        ) {
+          await refreshDetail(currentConversationId);
+        }
       } catch (error) {
         setErrorMessage(getAdminErrorMessage(error));
       }
     }, 3000);
 
     return () => window.clearInterval(interval);
-  }, [activeConversationId, refreshConversations, refreshDetail]);
+  }, [refreshConversations, refreshDetail]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length]);
 
   const handleSelectConversation = (id: string) => {
-    setActiveConversationId(id);
+    setActiveConversationIdSafe(id);
     setReplyContent("");
     setSidebarOpen(false);
     setErrorMessage("");
@@ -248,7 +277,7 @@ export default function AdminClient() {
     setErrorMessage("");
     try {
       await resetDemoData();
-      setActiveConversationId(null);
+      setActiveConversationIdSafe(null);
       setActiveConversation(null);
       setMessages([]);
       setShowClearConfirm(false);
