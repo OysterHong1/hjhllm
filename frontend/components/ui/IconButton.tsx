@@ -9,10 +9,10 @@ type IconButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 const variantStyles: Record<IconButtonVariant, string> = {
-  plain: "text-[#111827] hover:bg-black/5",
+  plain: "text-foreground hover:bg-[#e9e9e5]",
   surface:
-    "border border-border bg-white text-[#111827] shadow-sm hover:bg-[#f8fafc]",
-  dark: "bg-[#111827] text-white shadow-sm hover:bg-[#243244]",
+    "border border-border bg-white text-foreground shadow-sm hover:bg-[#f1f1ee]",
+  dark: "bg-[#111111] text-white shadow-sm hover:bg-[#262626]",
 };
 
 export function IconButton({

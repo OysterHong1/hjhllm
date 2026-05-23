@@ -130,7 +130,7 @@ export function ChatComposer({
         )}
 
         {isRecording && (
-          <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-accent/30 bg-accent/5 px-3 py-2">
+          <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-accent/30 bg-[#eef6ff] px-3 py-2">
             <span className="text-xs text-accent">
               录音中 {formatAudioDuration(recordingSeconds * 1000)}
             </span>
@@ -149,7 +149,7 @@ export function ChatComposer({
           </div>
         )}
 
-        <div className="flex min-h-[64px] items-center gap-2 rounded-[32px] border border-white/80 bg-white px-3 py-2 shadow-[0_18px_40px_rgba(31,41,55,0.14)] md:min-h-[70px] md:gap-3 md:px-4">
+        <div className="flex min-h-[64px] items-center gap-2 rounded-[32px] border border-white/80 bg-white px-3 py-2 shadow-[0_18px_40px_rgba(16,24,40,0.10)] md:min-h-[70px] md:gap-3 md:px-4">
           <input
             ref={fileInputRef}
             type="file"
@@ -163,7 +163,7 @@ export function ChatComposer({
             value={value}
             onChange={(event) => onChangeValue(event.target.value)}
             onKeyDown={onKeyDown}
-            className="min-h-[44px] flex-1 rounded-none border-transparent bg-transparent px-1 py-3 text-[17px] leading-6 shadow-none placeholder:text-[#a1a1aa] focus:border-transparent focus:ring-0"
+            className="min-h-[44px] flex-1 rounded-none border-transparent bg-transparent px-1 py-3 text-[17px] leading-6 shadow-none placeholder:text-[#8a8882] focus:border-transparent focus:ring-0"
             rows={2}
           />
           <div className="flex flex-shrink-0 items-center gap-1">

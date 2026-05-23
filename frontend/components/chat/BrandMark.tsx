@@ -12,7 +12,7 @@ export function BrandMark({ label = null, compact = false }: BrandMarkProps) {
   return (
     <div className="flex min-w-0 items-center gap-2">
       <span
-        className="flex flex-shrink-0 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-black/5"
+        className="flex flex-shrink-0 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-border"
         style={{ width: size, height: size }}
       >
         <span className="relative block" style={{ width: innerSize, height: innerSize }}>

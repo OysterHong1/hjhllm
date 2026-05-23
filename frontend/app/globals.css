@@ -1,13 +1,13 @@
 @import "tailwindcss";
 
 @theme inline {
-  --color-background: #eef3f8;
-  --color-foreground: #202124;
-  --color-sidebar: #f7f9fb;
-  --color-border: #dfe6ee;
-  --color-muted: #6b7280;
-  --color-accent: #2563eb;
-  --color-bubble-user: #dbeafe;
+  --color-background: #f7f7f4;
+  --color-foreground: #141414;
+  --color-sidebar: #f2f2ef;
+  --color-border: #deded8;
+  --color-muted: #77736d;
+  --color-accent: #1677ff;
+  --color-bubble-user: #eceff3;
   --color-bubble-admin: #ffffff;
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
@@ -17,6 +17,11 @@ body {
   background: var(--color-background);
   color: var(--color-foreground);
   font-family: var(--font-sans, Arial, Helvetica, sans-serif);
+}
+
+::selection {
+  background: #dbeafe;
+  color: #111111;
 }
 
 button,

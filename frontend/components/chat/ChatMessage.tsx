@@ -38,8 +38,8 @@ export function ChatMessage({
         <div
           className={`rounded-[24px] px-4 py-3 text-sm leading-relaxed shadow-sm ${
             isUser
-              ? "bg-[#dceeff] text-[#172033]"
-              : "border border-[#e6e8ec] bg-white text-foreground"
+              ? "bg-bubble-user text-foreground"
+              : "border border-border bg-bubble-admin text-foreground"
           }`}
         >
           <div className="space-y-2">
@@ -60,7 +60,7 @@ export function UserAvatar({ username }: { username: string }) {
   const initial = username.trim().slice(0, 1).toUpperCase() || "U";
 
   return (
-    <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-[#1f2937] text-sm font-semibold text-white shadow-sm">
+    <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-[#111111] text-sm font-semibold text-white shadow-sm ring-1 ring-border">
       {initial}
     </div>
   );
@@ -73,7 +73,7 @@ export function AdminAvatar() {
       alt=""
       width={36}
       height={36}
-      className="h-9 w-9 flex-shrink-0 rounded-full object-cover shadow-sm"
+      className="h-9 w-9 flex-shrink-0 rounded-full object-cover shadow-sm ring-1 ring-border"
     />
   );
 }

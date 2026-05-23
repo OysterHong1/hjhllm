@@ -18,7 +18,7 @@ export function ThinkingBubble() {
   return (
     <div className="flex justify-start gap-3">
       <AdminAvatar />
-      <div className="min-w-[100px] select-none rounded-[22px] border border-[#e6e2da] bg-white px-4 py-3 text-sm italic text-muted shadow-sm">
+      <div className="min-w-[100px] select-none rounded-[22px] border border-border bg-bubble-admin px-4 py-3 text-sm italic text-muted shadow-sm">
         {text}
       </div>
     </div>
