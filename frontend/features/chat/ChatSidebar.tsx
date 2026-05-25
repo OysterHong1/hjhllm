@@ -21,9 +21,9 @@ export function ChatSidebar({
 }: ChatSidebarProps) {
   return (
     <aside className="flex h-full flex-col border-r border-border bg-sidebar">
-      <div className="flex items-center justify-between px-4 py-4">
+      <div className="flex items-center justify-between px-4 py-3">
         <BrandMark compact />
-        <span className="inline-flex h-9 w-9 items-center justify-center rounded-full text-muted">
+        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted">
           <SidebarIcon />
         </span>
       </div>
@@ -31,7 +31,7 @@ export function ChatSidebar({
       <div className="px-2 pb-3">
         <button
           onClick={onNewConversation}
-          className="flex h-10 w-full items-center gap-2 rounded-lg bg-[#e9e9e5] px-3 text-left text-sm font-medium text-foreground transition-colors hover:bg-[#dfdfda]"
+          className="flex h-9 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-medium text-foreground transition-colors hover:bg-[#ebebe8]"
         >
           <EditIcon />
           新聊天
@@ -39,7 +39,7 @@ export function ChatSidebar({
       </div>
 
       <div className="flex-1 overflow-y-auto px-2 pb-2">
-        <div className="px-2 pb-2 text-xs font-semibold text-foreground">
+        <div className="px-2 pb-2 text-xs font-medium text-muted">
           最近
         </div>
         {conversations.length === 0 && (
@@ -51,9 +51,9 @@ export function ChatSidebar({
           <button
             key={conversation.id}
             onClick={() => onSelectConversation(conversation.id)}
-            className={`mb-1 w-full rounded-lg px-3 py-2.5 text-left text-sm transition-colors hover:bg-[#ebebe7] ${
+            className={`mb-1 w-full rounded-lg px-3 py-2.5 text-left text-sm transition-colors hover:bg-[#ebebe8] ${
               activeConversationId === conversation.id
-                ? "bg-[#e2e2de]"
+                ? "bg-[#e6e6e2]"
                 : ""
             }`}
           >

@@ -354,9 +354,9 @@ export default function ChatClient() {
   );
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full bg-background">
       {/* Desktop sidebar */}
-      <div className="hidden h-full w-[280px] flex-shrink-0 md:block">
+      <div className="hidden h-full w-[260px] flex-shrink-0 md:block">
         {sidebar}
       </div>
 
@@ -374,7 +374,7 @@ export default function ChatClient() {
       {/* Main chat area */}
       <main className="flex min-w-0 flex-1 flex-col bg-background">
         {/* Top bar (mobile only) */}
-        <div className="flex items-center gap-3 border-b border-border bg-background/90 px-4 py-3 md:hidden">
+        <div className="flex items-center gap-3 border-b border-border bg-background/95 px-4 py-3 md:hidden">
           <IconButton
             icon={<SidebarIcon />}
             label="打开侧边栏"
@@ -391,9 +391,9 @@ export default function ChatClient() {
 
         {/* Message list */}
         <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-3xl space-y-6 px-4 py-6 md:px-6">
+          <div className="mx-auto max-w-3xl space-y-5 px-4 py-6 md:px-6">
             {!activeConversationId && (
-              <div className="py-12 text-center text-sm text-muted">
+              <div className="py-20 text-center text-sm text-muted">
                 选择一个会话或新建会话开始聊天
               </div>
             )}

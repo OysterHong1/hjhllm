@@ -22,7 +22,7 @@ export function ChatMessage({
 
   return (
     <div
-      className={`animate-message-in flex gap-3 ${
+      className={`animate-message-in flex gap-3 px-1 ${
         isUser ? "justify-end" : "justify-start"
       }`}
     >
@@ -36,9 +36,9 @@ export function ChatMessage({
           <div className="mb-1 text-[11px] text-muted">{senderLabel}</div>
         )}
         <div
-          className={`rounded-[24px] px-4 py-3 text-sm leading-relaxed shadow-sm ${
+          className={`rounded-[18px] px-4 py-3 text-sm leading-relaxed shadow-sm ${
             isUser
-              ? "bg-bubble-user text-foreground"
+              ? "bg-bubble-user text-foreground shadow-none"
               : "border border-border bg-bubble-admin text-foreground"
           }`}
         >
@@ -60,7 +60,7 @@ export function UserAvatar({ username }: { username: string }) {
   const initial = username.trim().slice(0, 1).toUpperCase() || "U";
 
   return (
-    <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-[#111111] text-sm font-semibold text-white shadow-sm ring-1 ring-border">
+    <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[#171717] text-xs font-semibold text-white shadow-sm">
       {initial}
     </div>
   );
@@ -73,7 +73,7 @@ export function AdminAvatar() {
       alt=""
       width={36}
       height={36}
-      className="h-9 w-9 flex-shrink-0 rounded-full object-cover shadow-sm ring-1 ring-border"
+      className="h-8 w-8 flex-shrink-0 rounded-full object-cover shadow-sm ring-1 ring-border"
     />
   );
 }

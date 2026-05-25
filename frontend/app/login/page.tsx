@@ -68,12 +68,12 @@ export default function LoginPage() {
 
   return (
     <div className="flex h-full items-center justify-center bg-background px-4">
-      <div className="w-full max-w-md mx-auto">
+      <div className="mx-auto w-full max-w-md">
         <div className="mb-7 flex justify-center">
           <BrandMark />
         </div>
 
-        <div className="rounded-[28px] border border-border bg-white p-3 shadow-xl shadow-slate-200/70">
+        <div className="rounded-[24px] border border-border bg-white p-3 shadow-[0_18px_45px_rgba(20,20,20,0.08)]">
           <Input
             placeholder="输入用户名"
             value={username}

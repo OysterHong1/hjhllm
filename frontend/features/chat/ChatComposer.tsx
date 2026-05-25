@@ -49,7 +49,7 @@ export function ChatComposer({
     Boolean(selectedVideo);
 
   return (
-    <div className="flex-shrink-0 bg-background/95 px-3 pb-4 pt-2">
+    <div className="flex-shrink-0 bg-background px-3 pb-4 pt-2">
       <div className="mx-auto max-w-3xl">
         {selectedImages.length > 0 && (
           <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -101,9 +101,7 @@ export function ChatComposer({
           </div>
         )}
 
-        <div
-          className="flex min-h-[64px] items-center gap-2 rounded-[32px] border border-[#e8e8e3] bg-white px-3 py-2 shadow-[0_18px_40px_rgba(16,24,40,0.10)] transition-all duration-200 md:min-h-[70px] md:gap-3 md:px-4"
-        >
+        <div className="flex min-h-[58px] items-center gap-2 rounded-[24px] border border-border bg-white px-3 py-2 shadow-[0_14px_35px_rgba(20,20,20,0.08)] transition-all duration-200 md:min-h-[64px] md:gap-3 md:px-4">
           <input
             ref={fileInputRef}
             type="file"
@@ -117,7 +115,7 @@ export function ChatComposer({
             value={value}
             onChange={(event) => onChangeValue(event.target.value)}
             onKeyDown={onKeyDown}
-            className="min-h-[44px] flex-1 rounded-none border-transparent bg-transparent px-1 py-3 text-[17px] leading-6 shadow-none placeholder:text-[#8a8882] focus:border-transparent focus:ring-0"
+            className="min-h-[40px] flex-1 rounded-none border-transparent bg-transparent px-1 py-2.5 text-[15px] leading-6 shadow-none placeholder:text-[#8a8882] focus:border-transparent focus:ring-0"
             rows={2}
           />
           <div className="flex flex-shrink-0 items-center gap-1">
