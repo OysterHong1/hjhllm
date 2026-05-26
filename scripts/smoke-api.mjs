@@ -88,11 +88,38 @@ function hasAttachmentUrl(value) {
   );
 }
 
-async function cleanupSmokeData() {
-  const isLocalTarget =
+function isLocalTarget() {
+  return (
     baseUrl.startsWith("http://localhost:") ||
-    baseUrl.startsWith("http://127.0.0.1:");
-  if (!isLocalTarget) {
+    baseUrl.startsWith("http://127.0.0.1:")
+  );
+}
+
+async function readSseEvents(response) {
+  const text = await response.text();
+  return text
+    .trim()
+    .split(/\r?\n\r?\n/)
+    .filter(Boolean)
+    .map((part) => {
+      const lines = part.split(/\r?\n/);
+      const event = lines
+        .find((line) => line.startsWith("event:"))
+        ?.slice("event:".length)
+        .trim();
+      const data = lines
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice("data:".length).trimStart())
+        .join("\n");
+      return {
+        event,
+        data: data ? JSON.parse(data) : null,
+      };
+    });
+}
+
+async function cleanupSmokeData() {
+  if (!isLocalTarget()) {
     console.log("Skipped local reset cleanup for non-local target");
     return;
   }
@@ -106,6 +133,7 @@ async function cleanupSmokeData() {
 const runId = Date.now().toString(36);
 const username = `smoke-admin-${runId}`;
 const userText = `smoke user message ${runId}`;
+const streamText = `smoke streaming message ${runId}`;
 const attachmentText = `smoke attachment message ${runId}`;
 const audioText = `smoke audio message ${runId}`;
 const videoText = `smoke video message ${runId}`;
@@ -121,10 +149,11 @@ assert(
 console.log("✓ admin API rejects missing token");
 
 const {
-  data: { config: aiReplyConfig },
+  data: { config: initialAiReplyConfig },
 } = await api("/api/admin/ai-reply/config", {
   headers: adminHeaders(),
 });
+let aiReplyConfig = initialAiReplyConfig;
 assert(
   aiReplyConfig?.provider === "deepseek" &&
     typeof aiReplyConfig.enabled === "boolean" &&
@@ -132,6 +161,18 @@ assert(
   "Admin AI reply config endpoint did not return the expected shape"
 );
 console.log("✓ admin AI reply config is readable");
+
+if (isLocalTarget() && aiReplyConfig.enabled) {
+  const {
+    data: { config },
+  } = await api("/api/admin/ai-reply/enabled", {
+    method: "POST",
+    headers: adminHeaders(),
+    body: JSON.stringify({ enabled: false }),
+  });
+  aiReplyConfig = config;
+  console.log("✓ disabled local AI auto-reply for deterministic smoke");
+}
 
 const {
   data: { user },
@@ -172,6 +213,36 @@ await api(`/api/conversations/${encodeURIComponent(conversation.id)}/messages`, 
   body: JSON.stringify({ userId: user.id, text: userText }),
 });
 console.log("✓ created user message");
+
+const streamResponse = await fetch(
+  `${baseUrl}/api/conversations/${encodeURIComponent(
+    conversation.id
+  )}/messages/stream`,
+  {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ userId: user.id, text: streamText }),
+  }
+);
+assert(streamResponse.ok, "Streaming message endpoint should return 2xx");
+assert(
+  streamResponse.headers.get("content-type")?.includes("text/event-stream"),
+  "Streaming message endpoint should return text/event-stream"
+);
+const streamEvents = await readSseEvents(streamResponse);
+assert(
+  streamEvents.some(
+    (item) => item.event === "message" && item.data?.message?.text === streamText
+  ),
+  "Streaming message endpoint did not emit the created user message"
+);
+assert(
+  streamEvents.some((item) => item.event === "done"),
+  "Streaming message endpoint did not emit a done event"
+);
+console.log("✓ streamed user message lifecycle");
 
 const pngBytes = new Uint8Array([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,

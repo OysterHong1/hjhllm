@@ -138,6 +138,88 @@ export async function createAttachmentMessage(input: {
   return result.data.message;
 }
 
+export type MessageStreamEvent =
+  | { type: "message"; message: Message }
+  | { type: "delta"; text: string }
+  | { type: "done"; message: Message | null }
+  | { type: "error"; message: string };
+
+function parseSseEvent(raw: string): MessageStreamEvent | null {
+  const lines = raw.split(/\r?\n/);
+  const eventLine = lines.find((line) => line.startsWith("event:"));
+  const dataLines = lines
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice("data:".length).trimStart());
+  if (!eventLine || dataLines.length === 0) return null;
+
+  const event = eventLine.slice("event:".length).trim();
+  const data = JSON.parse(dataLines.join("\n")) as Record<string, unknown>;
+  if (event === "message") {
+    return { type: "message", message: data.message as Message };
+  }
+  if (event === "delta") {
+    return { type: "delta", text: String(data.text ?? "") };
+  }
+  if (event === "done") {
+    return { type: "done", message: (data.message as Message | null) ?? null };
+  }
+  if (event === "error") {
+    return { type: "error", message: String(data.message ?? "请求失败") };
+  }
+  return null;
+}
+
+export async function createMessageStream(
+  conversationId: string,
+  userId: string,
+  text: string,
+  onEvent: (event: MessageStreamEvent) => void
+): Promise<void> {
+  const response = await fetch(
+    `/api/conversations/${encodeURIComponent(conversationId)}/messages/stream`,
+    {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ userId, text }),
+    }
+  );
+
+  if (!response.ok || !response.body) {
+    const result = (await response.json()) as ApiResult<unknown>;
+    if (!result.ok) throw new Error(result.error.message);
+    throw new Error("请求失败");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+    const parts = buffer.split(/\r?\n\r?\n/);
+    buffer = parts.pop() ?? "";
+
+    for (const part of parts) {
+      const event = parseSseEvent(part);
+      if (!event) continue;
+      onEvent(event);
+      if (event.type === "error") throw new Error(event.message);
+    }
+
+    if (done) break;
+  }
+
+  const finalEvent = parseSseEvent(buffer.trim());
+  if (finalEvent) {
+    onEvent(finalEvent);
+    if (finalEvent.type === "error") throw new Error(finalEvent.message);
+  }
+}
+
 export function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   const failure = error as Partial<ApiFailure>;

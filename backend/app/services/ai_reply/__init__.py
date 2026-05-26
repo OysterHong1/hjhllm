@@ -5,12 +5,7 @@ from .config import (
     update_ai_reply_config,
 )
 from .context import build_chat_messages, build_deepseek_messages
-from .providers.deepseek import (
-    parse_deepseek_response,
-    parse_deepseek_usage,
-    request_deepseek_reply,
-)
-from .runtime import maybe_create_ai_reply
+from .runtime import maybe_create_ai_reply, stream_ai_reply_events
 from .usage import ensure_usage_tables, get_today_token_usage_snapshot
 
 __all__ = [
@@ -21,9 +16,7 @@ __all__ = [
     "get_ai_reply_config",
     "get_today_token_usage_snapshot",
     "maybe_create_ai_reply",
-    "parse_deepseek_response",
-    "parse_deepseek_usage",
-    "request_deepseek_reply",
     "set_ai_reply_enabled",
+    "stream_ai_reply_events",
     "update_ai_reply_config",
 ]

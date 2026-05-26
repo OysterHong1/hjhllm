@@ -9,7 +9,7 @@ import { SidebarIcon } from "@/components/ui/icons";
 import {
   createAttachmentMessage,
   createConversation,
-  createMessage,
+  createMessageStream,
   getErrorMessage,
   listConversations,
   listMessages,
@@ -45,6 +45,8 @@ export default function ChatClient() {
   const [composerValue, setComposerValue] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const [isReplyStreaming, setIsReplyStreaming] = useState(false);
+  const [streamingAssistantText, setStreamingAssistantText] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
@@ -54,6 +56,11 @@ export default function ChatClient() {
   const selectedImagesRef = useRef<SelectedImage[]>([]);
   const selectedVideoRef = useRef<SelectedVideo | null>(null);
   const isSendingRef = useRef(false);
+  const activeConversationIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    activeConversationIdRef.current = activeConversationId;
+  }, [activeConversationId]);
 
   const loadMessages = useCallback(
     async (conversationId: string, userId: string) => {
@@ -117,12 +124,24 @@ export default function ChatClient() {
 
   const isThinking =
     activeMessages.length > 0 &&
-    activeMessages[activeMessages.length - 1].sender === "user";
+    activeMessages[activeMessages.length - 1].sender === "user" &&
+    (!isReplyStreaming || !streamingAssistantText);
+  const streamingAssistantMessage: Message | null =
+    streamingAssistantText && activeConversationId
+      ? {
+          id: "streaming-assistant",
+          conversationId: activeConversationId,
+          sender: "assistant",
+          text: streamingAssistantText,
+          attachments: [],
+          createdAt: new Date().toISOString(),
+        }
+      : null;
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [activeMessages.length, isThinking]);
+  }, [activeMessages.length, isThinking, streamingAssistantText]);
 
   useEffect(() => {
     if (!user || !activeConversationId) return;
@@ -176,6 +195,49 @@ export default function ChatClient() {
         const conversation = await createConversation(user.id);
         convId = conversation.id;
         setActiveConversationId(convId);
+        activeConversationIdRef.current = convId;
+      }
+
+      if (!videoToSend && imagesToSend.length === 0) {
+        setIsReplyStreaming(true);
+        setStreamingAssistantText("");
+        let clearedComposer = false;
+        await createMessageStream(convId, user.id, content, (event) => {
+          if (activeConversationIdRef.current !== convId) return;
+
+          if (event.type === "message") {
+            setActiveMessages((messages) => {
+              if (messages.some((current) => current.id === event.message.id)) {
+                return messages;
+              }
+              return [...messages, event.message];
+            });
+            if (!clearedComposer) {
+              setComposerValue("");
+              clearedComposer = true;
+            }
+          }
+
+          if (event.type === "delta") {
+            setStreamingAssistantText((current) => current + event.text);
+          }
+
+          if (event.type === "done") {
+            setIsReplyStreaming(false);
+            setStreamingAssistantText("");
+            const assistantMessage = event.message;
+            if (assistantMessage) {
+              setActiveMessages((messages) => {
+                if (messages.some((current) => current.id === assistantMessage.id)) {
+                  return messages;
+                }
+                return [...messages, assistantMessage];
+              });
+            }
+          }
+        });
+        await loadConversations(user.id, convId);
+        return;
       }
 
       const message =
@@ -186,14 +248,12 @@ export default function ChatClient() {
               files: [videoToSend.file],
               text: content,
             })
-          : imagesToSend.length > 0
-          ? await createAttachmentMessage({
+          : await createAttachmentMessage({
               conversationId: convId,
               userId: user.id,
               files: imagesToSend.map((image) => image.file),
               text: content,
-            })
-          : await createMessage(convId, user.id, content);
+            });
       setActiveMessages((messages) => {
         if (messages.some((current) => current.id === message.id)) {
           return messages;
@@ -212,6 +272,8 @@ export default function ChatClient() {
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
     } finally {
+      setIsReplyStreaming(false);
+      setStreamingAssistantText("");
       isSendingRef.current = false;
       setIsSending(false);
     }
@@ -226,7 +288,10 @@ export default function ChatClient() {
 
   const handleNewConversation = () => {
     setActiveConversationId(null);
+    activeConversationIdRef.current = null;
     setActiveMessages([]);
+    setIsReplyStreaming(false);
+    setStreamingAssistantText("");
     setComposerValue("");
     selectedImages.forEach((image) => URL.revokeObjectURL(image.previewUrl));
     setSelectedImages([]);
@@ -239,8 +304,11 @@ export default function ChatClient() {
   const handleSelectConversation = async (id: string) => {
     if (!user) return;
     setActiveConversationId(id);
+    activeConversationIdRef.current = id;
     setSidebarOpen(false);
     setErrorMessage("");
+    setIsReplyStreaming(false);
+    setStreamingAssistantText("");
     try {
       await loadMessages(id, user.id);
     } catch (error) {
@@ -401,6 +469,14 @@ export default function ChatClient() {
             {activeMessages.map((msg) => (
               <ChatMessage key={msg.id} message={msg} username={user.username} />
             ))}
+
+            {streamingAssistantMessage && (
+              <ChatMessage
+                key={streamingAssistantMessage.id}
+                message={streamingAssistantMessage}
+                username={user.username}
+              />
+            )}
 
             {isThinking && <ThinkingBubble />}
 

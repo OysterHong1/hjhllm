@@ -57,7 +57,7 @@ ADMIN_API_TOKEN=...
 ENABLE_ADMIN_UI=false
 ```
 
-浏览器端仍只请求同源 `/api/*`。`frontend/app/api/[...path]/route.ts` 作为统一薄代理转发到 Python 后端 `BACKEND_API_BASE_URL`；管理后台浏览器端请求 `/api/admin-panel/*`，由独立 Next 代理附带 `ADMIN_API_TOKEN` 请求后端管理 API。
+浏览器端仍只请求同源 `/api/*`。`frontend/app/api/[...path]/route.ts` 作为统一薄代理转发到 Python 后端 `BACKEND_API_BASE_URL`；管理后台浏览器端请求 `/api/admin-panel/*`，由独立 Next 代理附带 `ADMIN_API_TOKEN` 请求后端管理 API。文本聊天发送使用 streaming fetch 接收后端 SSE 事件，附件上传仍走普通 HTTP。
 
 AI 自动回复的“每日 token 总量上限”保存在服务端配置表中，由 Python 后端在出站调用前后强制检查与记账；每日归零时间默认按 `AI_REPLY_TOKEN_USAGE_TIMEZONE`（默认 `Asia/Shanghai`）计算。
 
@@ -73,7 +73,7 @@ POSTGRES_PASSWORD=replace-with-password docker compose -f docker-compose.postgre
 3. 执行迁移：
 
 ```bash
-psql "$DATABASE_URL" -f db/migrations/001_initial_chat_schema.sql
+psql "$DATABASE_URL" -f scripts/migrations/001_initial_chat_schema.sql
 ```
 
 4. 确认表已创建：`users`、`conversations`、`messages`、`attachments`。
@@ -117,17 +117,27 @@ npm run dev
 
 `conversation.md` 保存会话信息、文字消息和附件相对链接；图片、语音、视频分别打包到对应目录。归档保存位置由管理员在浏览器下载流程中选择。
 
-### 测试流程
+### 更新与测试流程
 
-本阶段固定为两段验证：
+后续所有更新先在本地完整验证，确认无问题后再按生产部署流程发布。
+
+基础检查：
 
 ```bash
 npm run lint
 npm run build
-npm run test:smoke -- http://127.0.0.1:3000
 ```
 
-Smoke 测试需要 Python 后端和 Next dev server 都已启动。测试覆盖文本消息、管理员回复、多图附件上传、音频附件上传、视频附件上传、消息读取和临时数据清理。
+本地 Docker 联调：
+
+```bash
+# 先启动本机维护的完整 Docker 测试环境，确保前端监听 127.0.0.1:3000
+ADMIN_API_TOKEN=local-dev-admin-token npm run test:smoke -- http://127.0.0.1:3000
+```
+
+本地验证全部通过后，再提交需要入库的改动。只有需要线上生效的代码或 README 更新，才执行 [生产部署](#生产部署)。
+
+Smoke 测试覆盖文本消息、管理员回复、多图附件上传、音频附件上传、视频附件上传、消息读取和临时数据清理。
 
 ## 配额与备份
 
@@ -161,7 +171,7 @@ Ubuntu + Docker Compose 部署流程见 [docs/deployment.md](docs/deployment.md)
 - 匿名身份只依赖浏览器保存的 `userId`，不是强认证。
 - 管理端使用单个 `ADMIN_API_TOKEN`，不是多管理员账号系统。
 - 多模态附件只做上传、保存、展示，不做 AI 解析、转写或摘要。
-- 当前实时链路仍保留轮询；WebSocket 将在 Python 后端稳定后接入。
+- 文本 AI 回复使用 SSE/streaming fetch 推送增量内容；会话列表和管理端仍保留 HTTP 拉取。
 - 本地磁盘容量不足时需要扩容云盘或迁移附件目录。
 - 如果启用了 AI 自动回复日限额，管理后台会展示今日 token 用量、剩余额度和正在预留中的 token。
 
@@ -179,7 +189,7 @@ Ubuntu + Docker Compose 部署流程见 [docs/deployment.md](docs/deployment.md)
 │   ├── config              # 环境配置
 │   ├── infra               # DB / 文件存储
 │   └── services            # 聊天与归档业务
-├── db/migrations           # PostgreSQL schema
+├── scripts/migrations      # PostgreSQL schema
 └── docs                    # 项目文档
 ```
 
